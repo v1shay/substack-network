@@ -11,3 +11,5 @@ README.md merge=ours
 
 # Database: stored via Git LFS so the repo stays under size limits (see README).
 cartographer.db filter=lfs diff=lfs merge=lfs -text
+
+*.html linguist-detectable=false
