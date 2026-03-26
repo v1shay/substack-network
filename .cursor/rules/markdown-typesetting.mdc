@@ -1,0 +1,27 @@
+---
+description: Markdown typesetting — avoid overusing horizontal rules and bold; no bold in headings
+globs: "**/*.md"
+alwaysApply: false
+---
+
+# Markdown typesetting
+
+When writing or editing Markdown (`.md`) in this project:
+
+## Horizontal rules (`---`)
+
+- Do **not** overuse `---`. Use them sparingly (e.g. one after the main title block at the top of a doc, or to separate a few major parts). Do not use "---" before a heading such as `##`, `###`, etc unless the file is very long. The only exception I am aware of is markdownfiles that record a full conversation with a chatbot. Then it makes sense to separate all question-answer pairs by "---".
+- Prefer blank lines and heading hierarchy to structure the document instead of repeated horizontal rules.
+
+## Bold (`**text**`)
+
+- Do **not** overuse bold. Use it only when you need strong emphasis (e.g. one key term per paragraph, or the first occurrence of a defined term).
+- **Never** use bold inside headings. Headings are already prominent; write them in plain text.
+  - ❌ `## **Important section**`
+  - ✅ `## Important section`
+
+## Summary
+
+- Few `---`; structure with headings and spacing.
+- Sparing use of `**` in body text.
+- No `**` in any heading (`#`, `##`, `###`, etc.).

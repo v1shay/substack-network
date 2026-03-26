@@ -1,0 +1,64 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Environment / secrets
+.env
+.env.local
+*.env
+
+# Data and generated files (keep data/ but ignore its contents except the graph and lists)
+data/*
+!data/substack_graph.html
+!data/graph-publications.html
+!data/db-publications.html
+!data/layer_stats.html
+!data/failed_publications.html
+!data/failed_investigation.html
+!data/recommendations_analysis.md
+data/failed_investigation.log
+*.db
+!cartographer.db
+*.db-journal
+*.db-wal
+*.db-shm
+scripts/*.db
+
+# Logs (runtime logs, not design-decision log/)
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# gh_pages.py temporary worktree (never leave main)
+.pages-worktree/
+
+# milestone01.py single-instance lock
+.crawler.lock
+.investigator.lock
+
+# Merge script: lives in private repo; run from private repo (script cd's to public to merge)
+merge-to-public.sh
+
+# AI continuity snapshot (local-only, never commit)
+docs/AI_CONTEXT.md

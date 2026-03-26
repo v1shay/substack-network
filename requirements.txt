@@ -1,0 +1,6 @@
+# For scripts/milestone01/centrality.py and visualize.py (installed by setup.sh)
+requests>=2.32.0
+networkx>=3.0
+numpy>=1.20
+scipy>=1.7
+pyvis>=0.3.0

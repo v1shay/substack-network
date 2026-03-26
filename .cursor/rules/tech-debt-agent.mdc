@@ -1,0 +1,38 @@
+---
+description: Preliminary rules for the technical-debt monitoring agent (design only; no implementation yet)
+alwaysApply: false
+globs: software-quality/**/*
+---
+
+# Technical debt monitoring agent — preliminary rules
+
+Read together with **software-quality/tech-debt-agent-design.md** (design decisions) and **software-quality/tech-debt-agent-research.md** (background research). This rule sketches how an agent should behave when we implement it; no code yet.
+
+## Role
+
+The agent monitors the codebase for signs of accumulating technical debt and, over time, will suggest concrete changes to reduce it. It should be informed by software engineering research on [technical debt measurement](https://scholar.google.com/scholar?q=technical+debt+measurement+software), [software quality metrics](https://scholar.google.com/scholar?q=software+quality+metrics+maintainability), and [code smell detection](https://scholar.google.com/scholar?q=code+smell+detection+refactoring).
+
+## Scope and boundaries
+
+- **Monitor first, suggest later.** Initially the agent focuses on measuring and reporting; suggestions are a later phase.
+- **Evidence-based.** Prefer metrics and classifications that have empirical support (see research note for pointers).
+- **Project-appropriate.** This is a Python/JS repo with scripts, data pipelines, and a small frontend. Metrics and thresholds should fit that context (e.g. script length, duplication, test coverage if present).
+
+## Measurements to consider (see design doc for choices)
+
+- Structural: file/function length, [cyclomatic complexity](https://scholar.google.com/scholar?q=cyclomatic+complexity+maintainability), duplication (clones).
+- Debt indicators: [technical debt principal and interest](https://scholar.google.com/scholar?q=technical+debt+principal+interest), TODO/FIXME density, dependency freshness.
+- Consistency: naming, style drift, dead or unused code.
+
+Do not invent new metrics without grounding in the design doc or research note.
+
+## Output and interaction
+
+- Reports and findings live under **software-quality/** (or a designated output path defined in the design doc). Do not scatter ad-hoc quality comments elsewhere.
+- When suggesting changes, cite which measurement or finding motivates the suggestion.
+- Prefer small, reviewable improvements over large refactors.
+
+## References
+
+- Design: **software-quality/tech-debt-agent-design.md**
+- Research: **software-quality/tech-debt-agent-research.md**

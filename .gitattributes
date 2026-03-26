@@ -1,0 +1,13 @@
+# When .gitignore is merged (e.g. from private), keep this repo's version.
+# "merge=ours" means: use the custom driver named "ours". That driver is defined in git config
+# (not in this file): run "git config merge.ours.driver true" once. It tells Git to keep "ours".
+#
+# See it:  git config --get merge.ours.driver   (or look in ~/.gitconfig / .git/config under [merge "ours"])
+# Change:  git config merge.ours.driver "yourcommand"   (or  git config --unset merge.ours.driver  to remove)
+.gitignore merge=ours
+
+# Root README: keep this repo's version when merging (same "ours" driver as above).
+README.md merge=ours
+
+# Database: stored via Git LFS so the repo stays under size limits (see README).
+cartographer.db filter=lfs diff=lfs merge=lfs -text

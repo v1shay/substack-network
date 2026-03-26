@@ -1,0 +1,74 @@
+# Design decisions log maintenance
+
+Rules for maintaining the design decisions log (daily log files in `log/`).
+
+## Terminology
+
+We call these **"Design decisions log"** (or **"Design log"** for short). Alternative terms:
+
+- **Log** — Common in SWE, but typically refers to runtime/event logs (e.g., application logs, audit logs). Our logs are **design-time records**, not runtime logs.
+- **Journal** — More academic/research-oriented; implies personal reflection. Our logs are **project records**, not personal journals.
+- **Changelog** — For tracking code changes/releases (e.g., `CHANGELOG.md`). Our logs track **design decisions**, not just code changes.
+- **Design Decision Record (DDR)** or **Architecture Decision Record (ADR)** — Formal format for individual decisions. Our logs are **daily summaries** of multiple decisions, not individual ADRs.
+
+**Why "Design decisions log"?** It's clear, matches common SWE practice (design logs, engineering logs), and emphasizes that we're recording **decisions** (not just changes or events).
+
+## File naming
+
+- Format: `YYYY-MM-DD.md` (e.g., `2026-02-16.md`)
+- Location: `log/` directory
+- One file per day
+
+## Structure
+
+Each log file should have:
+
+1. **Header:** `# Design decisions log — YYYY-MM-DD`
+2. **Brief intro:** "Record of design and workflow decisions made today."
+3. **Work done:** Numbered list of items, each with:
+   - **Bold title** (component/feature/script name)
+   - Bullet points describing what was done, why, and key details
+   - Cross-references to files/docs when relevant
+
+## When to add entries
+
+Add an entry when:
+- A **design decision** is made (architecture, data model, API, workflow)
+- A **significant change** is implemented (new feature, refactor, tooling)
+- **Documentation** is added or updated (docs, README, comments)
+- **Workflow** changes (scripts, automation, processes)
+
+Don't add entries for:
+- Minor bug fixes (unless they reveal a design issue)
+- Trivial changes (typos, formatting)
+- Routine maintenance (unless it involves a decision)
+
+## Writing style
+
+- **Concise but complete:** Enough detail to understand the decision later.
+- **Decision-focused:** Emphasize **what** was decided and **why**, not just what was done.
+- **Cross-reference:** Link to relevant files, docs, or other log entries.
+- **Use markdown:** Bold for titles, code backticks for file/script names, links for references.
+
+## Examples
+
+Good entry:
+```
+1. **Layer stats: when to show L'(d), L''(d), r(d) in the chart**
+   - Goal: L', L'', r at a depth are only meaningful once that layer is complete (e.g. layer 7 still being built ⇒ L'(7), L''(7), r(7) not meaningful). Table should show all depths; chart should hide incomplete.
+   - Implementation: chart hides L', L'', r only for the **last** depth (the layer currently being built). All other depths show. No pending-count query; simpler rule. Table shows L', L'', r for every depth.
+   - Removed the explanatory blurb from the layer stats page (avoid clutter).
+   - docs/bfs.md: sentence that in the layer stats chart, L'(d), L''(d), and r(d) are shown for all depths except the last.
+```
+
+Bad entry (too vague):
+```
+1. **Fixed layer stats**
+   - Updated the code.
+```
+
+## Maintenance
+
+- **Create new log file** at the start of each day (or when first entry is added).
+- **Update throughout the day** as decisions are made (don't wait until end of day).
+- **Review periodically** to ensure entries are clear and complete.

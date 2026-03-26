@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Substack recommendation graph</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+</head>
+<body>
+  <div id="graph-panel" class="container-fluid p-0">
+    <iframe id="graph-iframe" src="data/substack_graph.html" title="Recommendation graph" style="width:100%; height:720px; border:none;"></iframe>
+  </div>
+  <div id="list-panel" style="display:none; width:100%; height:720px;">
+    <iframe id="list-iframe" title="Publication list" style="width:100%; height:100%; border:none;"></iframe>
+  </div>
+  <div class="ps-3 pt-3">
+    <p class="mb-0"><a href="#" id="link-graph-list">Publications in graph</a> | <a href="#" id="link-db-list">Publications in database</a> | <a href="#" id="link-layer-stats">Layer stats</a> | <a href="#" id="link-failed">Failed publications</a> | <a href="#" id="link-unfailed">Unfailed publications</a></p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+  <script>
+    (function() {
+      var graphPanel = document.getElementById('graph-panel');
+      var listPanel = document.getElementById('list-panel');
+      var listIframe = document.getElementById('list-iframe');
+      function showList(src) {
+        listIframe.src = src;
+        graphPanel.style.display = 'none';
+        listPanel.style.display = 'block';
+      }
+      document.getElementById('link-graph-list').addEventListener('click', function(e) {
+        e.preventDefault();
+        showList('data/graph-publications.html');
+      });
+      document.getElementById('link-db-list').addEventListener('click', function(e) {
+        e.preventDefault();
+        showList('data/db-publications.html');
+      });
+      document.getElementById('link-layer-stats').addEventListener('click', function(e) {
+        e.preventDefault();
+        showList('data/layer_stats.html');
+      });
+      document.getElementById('link-failed').addEventListener('click', function(e) {
+        e.preventDefault();
+        showList('data/failed_publications.html');
+      });
+      document.getElementById('link-unfailed').addEventListener('click', function(e) {
+        e.preventDefault();
+        showList('data/unfailed_publications.html');
+      });
+      window.addEventListener('message', function(e) {
+        if (e.data === 'showGraph') {
+          listPanel.style.display = 'none';
+          graphPanel.style.display = 'block';
+        }
+      });
+      // Forward Shift to iframe so freeze works without clicking inside the graph first
+      window.addEventListener('keydown', function(e) {
+        if (e.key === 'Shift' && !e.repeat) {
+          var iframe = document.getElementById('graph-iframe');
+          if (iframe && iframe.contentWindow) iframe.contentWindow.postMessage('togglePhysics', '*');
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

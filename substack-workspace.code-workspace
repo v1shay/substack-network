@@ -1,0 +1,48 @@
+{
+	"folders": [
+		{
+			"name": "Substack Cartographer",
+			"path": "."
+		},
+		{
+			"name": "Substack Cartographer Private",
+			"path": "../substack-cartographer-private"
+		},
+		{
+			"name": "Substack API",
+			"path": "../substack_api"
+		},
+		{
+			"name": "Substack pAIa",
+			"path": "../substack-pAIa"
+		}
+	],
+	"settings": {
+		"python.defaultInterpreterPath": "${workspaceFolder:Substack Cartographer}/venv/bin/python",
+		"python.autoComplete.extraPaths": [
+			"${workspaceFolder:Substack API}",
+			"${workspaceFolder:Substack pAIa}",
+			"${workspaceFolder:Substack Cartographer}/scripts",
+			"${workspaceFolder:Substack Cartographer}/venv/lib/python3.12/site-packages"
+		],
+		"files.exclude": {
+			"**/__pycache__": true,
+			"**/*.pyc": true,
+			"**/.pytest_cache": true
+		},
+		"cursorpyright.analysis.autoImportCompletions": true,
+		"cursorpyright.analysis.extraPaths": [
+			"${workspaceFolder:Substack API}",
+			"${workspaceFolder:Substack pAIa}",
+			"${workspaceFolder:Substack Cartographer}/scripts",
+			"${workspaceFolder:Substack Cartographer}/venv/lib/python3.12/site-packages"
+		],
+		"cursorpyright.analysis.typeCheckingMode": "basic",
+	},
+	"extensions": {
+		"recommendations": [
+			"ms-python.python",
+			"ms-python.vscode-pylance"
+		]
+	}
+}
