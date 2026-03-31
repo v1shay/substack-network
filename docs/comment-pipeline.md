@@ -105,6 +105,13 @@ source .venv/bin/activate
 python scripts/comments/quality_gate.py
 ```
 
+Run the bounded live-DB readiness audit for full-surface comment crawling:
+
+```bash
+source .venv/bin/activate
+python scripts/comments/readiness_audit.py
+```
+
 Run strict live-only release gate in DNS-healthy environments:
 
 ```bash

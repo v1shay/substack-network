@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import requests
 
@@ -6,10 +7,11 @@ from scripts.comments.comment_api import CommentAPIFetchError, fetch_post_commen
 
 
 class _FakeResponse:
-    def __init__(self, status_code=200, payload=None, json_error=False):
+    def __init__(self, status_code=200, payload=None, json_error=False, headers=None):
         self.status_code = status_code
         self._payload = payload
         self._json_error = json_error
+        self.headers = headers or {}
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -53,7 +55,28 @@ class TestCommentAPI(unittest.TestCase):
         )
         self.assertEqual(["c1", "c2"], [c["id"] for c in comments])
         self.assertTrue(session.calls[0][1]["allow_redirects"])
+        self.assertIn("headers", session.calls[0][1])
         self.assertTrue(session.calls[0][0].endswith("/api/v1/post/p1/comments"))
+
+    def test_retry_after_header_is_honored_for_transient_errors(self):
+        session = _FakeSession(
+            [
+                _FakeResponse(status_code=429, headers={"Retry-After": "2"}),
+                _FakeResponse(payload={"comments": [{"id": "c1"}], "has_more": False}),
+            ]
+        )
+
+        with patch("scripts.comments.comment_api.random.uniform", return_value=0.0):
+            with patch("scripts.comments.comment_api.time.sleep") as sleep_mock:
+                comments = fetch_post_comments(
+                    "example.substack.com",
+                    post_id="p1",
+                    session=session,
+                )
+
+        self.assertEqual(["c1"], [c["id"] for c in comments])
+        self.assertGreaterEqual(sleep_mock.call_count, 2)
+        self.assertAlmostEqual(2.0, sleep_mock.call_args_list[1].args[0])
 
     def test_comment_endpoint_compatibility_fallback(self):
         session = _FakeSession(

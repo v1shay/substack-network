@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import time
 from typing import Any
 from urllib.parse import urlparse
@@ -16,6 +17,16 @@ from urllib.parse import urlparse
 import requests
 
 LOG = logging.getLogger(__name__)
+
+_COMMENT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+}
+_DEFAULT_COMMENT_PACING_SECONDS = 0.12
+_DEFAULT_COMMENT_JITTER_SECONDS = 0.08
 
 
 class CommentAPIFetchError(RuntimeError):
@@ -39,6 +50,46 @@ def _normalize_publication_url(publication_url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
 
 
+def _sleep_with_jitter(base_seconds: float, jitter_seconds: float) -> None:
+    base = max(float(base_seconds), 0.0)
+    jitter = max(float(jitter_seconds), 0.0)
+    delay = base
+    if jitter > 0:
+        delay += random.uniform(0.0, jitter)
+    if delay > 0:
+        time.sleep(delay)
+
+
+def _retry_delay_seconds(
+    response: Any | None,
+    *,
+    attempt: int,
+    backoff_seconds: float,
+    jitter_seconds: float,
+) -> float:
+    fallback = max(float(backoff_seconds), 0.0) * max(int(attempt), 1)
+    retry_after_raw = None
+    if response is not None:
+        headers = getattr(response, "headers", {}) or {}
+        retry_after_raw = headers.get("Retry-After")
+
+    retry_after_seconds = 0.0
+    if retry_after_raw is not None:
+        try:
+            retry_after_seconds = max(float(retry_after_raw), 0.0)
+        except (TypeError, ValueError):
+            retry_after_seconds = 0.0
+
+    base = max(fallback, retry_after_seconds)
+    if jitter_seconds > 0:
+        base += random.uniform(0.0, max(float(jitter_seconds), 0.0))
+    return base
+
+
+def _log_domain(url: str) -> str:
+    return urlparse(url).netloc.strip().lower() or "unknown"
+
+
 def _request_json(
     url: str,
     *,
@@ -46,29 +97,41 @@ def _request_json(
     timeout: float = 15.0,
     retries: int = 3,
     backoff_seconds: float = 0.5,
+    pacing_seconds: float = _DEFAULT_COMMENT_PACING_SECONDS,
+    jitter_seconds: float = _DEFAULT_COMMENT_JITTER_SECONDS,
     session: requests.Session | Any | None = None,
 ) -> Any | None:
     created_session = session is None
     sess = session or requests.Session()
     try:
         for attempt in range(1, max(retries, 1) + 1):
+            _sleep_with_jitter(pacing_seconds, jitter_seconds)
             try:
                 response = sess.get(
                     url,
                     params=params,
                     timeout=timeout,
                     allow_redirects=True,
+                    headers=_COMMENT_HEADERS,
                 )
                 if response.status_code == 429 or response.status_code >= 500:
                     LOG.error(
-                        "[comments][error] transient status code %s for %s (attempt %s/%s)",
+                        "[comments][error] domain=%s transient status code %s for %s (attempt %s/%s)",
+                        _log_domain(url),
                         response.status_code,
                         url,
                         attempt,
                         retries,
                     )
                     if attempt < retries:
-                        time.sleep(backoff_seconds * attempt)
+                        time.sleep(
+                            _retry_delay_seconds(
+                                response,
+                                attempt=attempt,
+                                backoff_seconds=backoff_seconds,
+                                jitter_seconds=jitter_seconds,
+                            )
+                        )
                         continue
                     raise CommentAPIFetchError(url, f"transient status code {response.status_code}")
 
@@ -76,23 +139,36 @@ def _request_json(
                 try:
                     payload = response.json()
                 except ValueError:
-                    LOG.error("[comments][error] invalid JSON response for %s", url)
+                    LOG.error("[comments][error] domain=%s invalid JSON response for %s", _log_domain(url), url)
                     raise CommentAPIFetchError(url, "invalid JSON response")
 
                 if not isinstance(payload, (dict, list)):
-                    LOG.error("[comments][error] unexpected JSON type %s for %s", type(payload), url)
+                    LOG.error(
+                        "[comments][error] domain=%s unexpected JSON type %s for %s",
+                        _log_domain(url),
+                        type(payload),
+                        url,
+                    )
                     raise CommentAPIFetchError(url, f"unexpected JSON type {type(payload).__name__}")
                 return payload
             except requests.RequestException as exc:
                 LOG.error(
-                    "[comments][error] request failed for %s (attempt %s/%s): %s",
+                    "[comments][error] domain=%s request failed for %s (attempt %s/%s): %s",
+                    _log_domain(url),
                     url,
                     attempt,
                     retries,
                     exc,
                 )
                 if attempt < retries:
-                    time.sleep(backoff_seconds * attempt)
+                    time.sleep(
+                        _retry_delay_seconds(
+                            getattr(exc, "response", None),
+                            attempt=attempt,
+                            backoff_seconds=backoff_seconds,
+                            jitter_seconds=jitter_seconds,
+                        )
+                    )
                     continue
                 raise CommentAPIFetchError(url, str(exc)) from exc
     finally:

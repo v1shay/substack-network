@@ -26,8 +26,8 @@ _PROFILE_HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     )
 }
-_DEFAULT_PROFILE_PACING_SECONDS = 0.02
-_DEFAULT_PROFILE_JITTER_SECONDS = 0.03
+_DEFAULT_PROFILE_PACING_SECONDS = 0.15
+_DEFAULT_PROFILE_JITTER_SECONDS = 0.08
 
 
 def _sleep_with_jitter(base_seconds: float, jitter_seconds: float) -> None:
@@ -38,6 +38,32 @@ def _sleep_with_jitter(base_seconds: float, jitter_seconds: float) -> None:
         delay += random.uniform(0.0, jitter)
     if delay > 0:
         time.sleep(delay)
+
+
+def _retry_delay_seconds(
+    response: Any | None,
+    *,
+    attempt: int,
+    backoff_seconds: float,
+    jitter_seconds: float,
+) -> float:
+    fallback = max(float(backoff_seconds), 0.0) * max(int(attempt), 1)
+    retry_after_raw = None
+    if response is not None:
+        headers = getattr(response, "headers", {}) or {}
+        retry_after_raw = headers.get("Retry-After")
+
+    retry_after_seconds = 0.0
+    if retry_after_raw is not None:
+        try:
+            retry_after_seconds = max(float(retry_after_raw), 0.0)
+        except (TypeError, ValueError):
+            retry_after_seconds = 0.0
+
+    delay = max(fallback, retry_after_seconds)
+    if jitter_seconds > 0:
+        delay += random.uniform(0.0, jitter_seconds)
+    return delay
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -117,7 +143,14 @@ def fetch_public_profile(
                         retries,
                     )
                     if attempt < retries:
-                        time.sleep(backoff_seconds * attempt)
+                        time.sleep(
+                            _retry_delay_seconds(
+                                response,
+                                attempt=attempt,
+                                backoff_seconds=backoff_seconds,
+                                jitter_seconds=jitter_seconds,
+                            )
+                        )
                         continue
                     return None
 
@@ -155,7 +188,14 @@ def fetch_public_profile(
                     exc,
                 )
                 if attempt < retries:
-                    time.sleep(backoff_seconds * attempt)
+                    time.sleep(
+                        _retry_delay_seconds(
+                            getattr(exc, "response", None),
+                            attempt=attempt,
+                            backoff_seconds=backoff_seconds,
+                            jitter_seconds=jitter_seconds,
+                        )
+                    )
                     continue
                 return None
     finally:

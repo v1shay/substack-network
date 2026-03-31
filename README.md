@@ -93,6 +93,14 @@ python scripts/comments/validate_live_ingestion.py paulkrugman.substack.com --po
 
 - **validate_live_ingestion.py** — Runs the real archive/comment endpoints for one publication, persists results to SQLite, verifies `users`, `posts`, and `comments` are populated, checks reply linkage and publication joins, and prints sample rows from the DB.
 
+### Full-surface readiness audit
+
+```bash
+python scripts/comments/readiness_audit.py
+```
+
+- **readiness_audit.py** — Runs a bounded live-DB readiness audit against the real `crawl.py` entrypoint on `graphs/llms`, creates a backup plus JSON/log artifacts under `audit/<timestamp>/`, validates only newly ingested rows, and hard-fails on metadata regressions such as missing `user_id`, `post_id`, reply linkage, timestamps, or comment text outside explicit deleted/unavailable payload edge cases.
+
 ### PageRank and visualization
 
 ```bash

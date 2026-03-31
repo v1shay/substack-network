@@ -128,6 +128,37 @@ class TestPublicationCrawlIntegrity(unittest.TestCase):
                 output.getvalue(),
             )
 
+    def test_existing_publication_failure_preserves_crawled_queue_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "existing-publication.db")
+            crawler = SubstackNetworkCrawler(db_name=db_path)
+            crawler.add_to_queue("alpha", 0)
+            crawler.conn.execute(
+                """
+                INSERT INTO publications (substack_id, name, domain, description, first_seen)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("pub-1", "Alpha", "alpha", "desc", "2026-01-01T00:00:00+00:00"),
+            )
+            crawler.conn.commit()
+
+            output = io.StringIO()
+            with patch("scripts.milestone01.crawl.Newsletter", _FakeNewsletter):
+                with patch.object(SubstackNetworkCrawler, "get_publication_info", return_value=None):
+                    with redirect_stdout(output):
+                        crawler.crawl(max_publications=1, max_attempts=1, delay=0)
+
+            conn = sqlite3.connect(db_path)
+            status = conn.execute(
+                "SELECT status FROM queue WHERE domain = ?",
+                ("alpha",),
+            ).fetchone()[0]
+            conn.close()
+            crawler.conn.close()
+
+            self.assertEqual("crawled", status)
+            self.assertIn("preserving queue status as crawled", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

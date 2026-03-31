@@ -294,6 +294,20 @@ class SubstackNetworkCrawler:
         except Exception:
             pass
 
+    def publication_exists(self, domain: str) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM publications WHERE domain = ? LIMIT 1",
+            (domain,),
+        ).fetchone()
+        return row is not None
+
+    def mark_failure_or_preserve_existing_publication(self, domain: str) -> None:
+        if self.publication_exists(domain):
+            print("   [i] Publication already exists in DB; preserving queue status as crawled.")
+            mark_queue_status(self.conn, domain=domain, status="crawled")
+            return
+        mark_queue_status(self.conn, domain=domain, status="failed")
+
     def run_comment_enrichment(
         self,
         publication_url: str,
@@ -480,11 +494,11 @@ class SubstackNetworkCrawler:
                     )
                 else:
                     print("   ❌ Could not fetch publication info.")
-                    mark_queue_status(self.conn, domain=current_domain, status="failed")
+                    self.mark_failure_or_preserve_existing_publication(current_domain)
 
             except Exception as e:
                 print(f"   ❌ Error: {e}")
-                mark_queue_status(self.conn, domain=current_domain, status="failed")
+                self.mark_failure_or_preserve_existing_publication(current_domain)
 
             self.conn.commit()
             if delay > 0:
