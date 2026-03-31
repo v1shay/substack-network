@@ -13,6 +13,7 @@ python scripts/update_graph.py
 ```
 
 **Note:** `update_graph.py` starts the crawler in the background (if it isn’t already running) so the DB keeps updating; the rest of the pipeline uses the current DB and exits. The crawler keeps running after you close the terminal. To stop it: `pkill -f "crawl.py"` (or `pgrep -f "crawl.py"` to get the process ID, then `kill <pid>`).
+The background crawl now starts with comment enrichment enabled by default, and detached crawler output is written to `log/crawler.log`.
 
 Here is an example workflow calling the scripts separately:
 
@@ -83,6 +84,14 @@ python scripts/comments/comment_pipeline.py paulkrugman.substack.com --post-limi
 ```
 
 - **comment_pipeline.py** — Thin standalone CLI wrapper around the same `process_comments(...)` pipeline used by `crawl.py --enable-comments`. By default it writes to `CARTOGRAPHER_ROOT/cartographer.db` (or `./cartographer.db` if `CARTOGRAPHER_ROOT` is unset). Use `--db path/to/cartographer.db` to target another SQLite file.
+
+### Live ingestion validation
+
+```bash
+python scripts/comments/validate_live_ingestion.py paulkrugman.substack.com --post-limit 1
+```
+
+- **validate_live_ingestion.py** — Runs the real archive/comment endpoints for one publication, persists results to SQLite, verifies `users`, `posts`, and `comments` are populated, checks reply linkage and publication joins, and prints sample rows from the DB.
 
 ### PageRank and visualization
 

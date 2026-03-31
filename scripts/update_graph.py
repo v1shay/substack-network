@@ -11,6 +11,7 @@ Run from repo root (or set CARTOGRAPHER_ROOT):
 
 import os
 import argparse
+import sqlite3
 import subprocess
 import sys
 import time
@@ -30,6 +31,12 @@ def crawler_lock_path(root: Path) -> Path:
 
 def investigator_lock_path(root: Path) -> Path:
     return root / ".investigator.lock"
+
+
+def detached_log_path(root: Path, process_name: str) -> Path:
+    log_dir = root / "log"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / f"{process_name}.log"
 
 
 def is_investigator_running(root: Path) -> bool:
@@ -74,17 +81,65 @@ def run(cmd: list[str], cwd: Path, name: str, env: dict[str, str]) -> None:
         sys.exit(r.returncode)
 
 
-def spawn_detached(cmd: list[str], cwd: Path, env: dict[str, str]) -> subprocess.Popen:
-    """Start a background process without inheriting the caller's terminal IO."""
-    return subprocess.Popen(
-        cmd,
-        cwd=cwd,
-        env=env,
-        start_new_session=True,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+def spawn_detached(
+    cmd: list[str],
+    cwd: Path,
+    env: dict[str, str],
+    *,
+    log_path: Path | None = None,
+) -> subprocess.Popen:
+    """Start a background process without inheriting terminal IO.
+
+    Detached jobs append stdout/stderr to a runtime log file so background
+    failures are inspectable instead of disappearing into /dev/null.
+    """
+    if log_path is None:
+        return subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            env=env,
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    child_env = env.copy()
+    child_env.setdefault("PYTHONUNBUFFERED", "1")
+    with log_path.open("ab") as log_handle:
+        return subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            env=child_env,
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=log_handle,
+            stderr=log_handle,
+        )
+
+
+def has_recommendation_data(root: Path) -> bool:
+    db_path = root / "cartographer.db"
+    if not db_path.exists():
+        return False
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT 1
+              FROM sqlite_master
+             WHERE type = 'table'
+               AND name = 'recommendations'
+            """
+        )
+        if cursor.fetchone() is None:
+            return False
+        cursor.execute("SELECT 1 FROM recommendations LIMIT 1")
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
 
 
 def main() -> None:
@@ -109,41 +164,50 @@ def main() -> None:
     if is_crawl_running(root):
         print("Crawl already in progress, skipping. Graph will use current DB.")
     else:
+        crawl_log = detached_log_path(root, "crawler")
         spawn_detached(
-            [py, str(scripts / "milestone01" / "crawl.py")],
+            [py, str(scripts / "milestone01" / "crawl.py"), "--enable-comments"],
             cwd=code_root,
             env=child_env,
+            log_path=crawl_log,
         )
-        print("Crawl started in background (keeps running after you close this terminal).")
+        print(
+            "Crawl started in background with comment enrichment enabled "
+            f"(log: {crawl_log})."
+        )
 
-    # Build the graph pipeline from current DB: PageRank, then interactive graph, then list pages.
-    run(
-        [py, str(scripts / "milestone01" / "centrality.py")],
-        cwd=code_root,
-        name="Centrality",
-        env=child_env,
-    )
+    # Build the graph pipeline from current DB only when recommendations exist.
+    # On a fresh runtime root the background crawl may not have produced edges yet.
+    if has_recommendation_data(root):
+        run(
+            [py, str(scripts / "milestone01" / "centrality.py")],
+            cwd=code_root,
+            name="Centrality",
+            env=child_env,
+        )
 
-    run(
-        [py, str(scripts / "milestone01" / "visualize.py")],
-        cwd=code_root,
-        name="Visualize",
-        env=child_env,
-    )
+        run(
+            [py, str(scripts / "milestone01" / "visualize.py")],
+            cwd=code_root,
+            name="Visualize",
+            env=child_env,
+        )
 
-    run(
-        [py, str(scripts / "milestone02" / "add_publication_lists.py")],
-        cwd=code_root,
-        name="Add publication lists",
-        env=child_env,
-    )
+        run(
+            [py, str(scripts / "milestone02" / "add_publication_lists.py")],
+            cwd=code_root,
+            name="Add publication lists",
+            env=child_env,
+        )
 
-    run(
-        [py, str(scripts / "milestone02" / "layer_stats.py")],
-        cwd=code_root,
-        name="Layer stats (L, r)",
-        env=child_env,
-    )
+        run(
+            [py, str(scripts / "milestone02" / "layer_stats.py")],
+            cwd=code_root,
+            name="Layer stats (L, r)",
+            env=child_env,
+        )
+    else:
+        print("Recommendations not available yet; skipping graph artifact generation for this run.")
 
     run(
         [py, str(scripts / "milestone02" / "extract_failed.py")],
@@ -163,10 +227,12 @@ def main() -> None:
     else:
         # Default = only new failed URLs (not yet in log). Use --full or --all to re-probe all.
         print("\n--- Investigate failed (report) [background] ---")
+        investigator_log = detached_log_path(root, "investigator")
         inv_proc = spawn_detached(
             [py, str(scripts / "milestone02" / "investigate_failed.py")],
             cwd=code_root,
             env=child_env,
+            log_path=investigator_log,
         )
         t0 = time.monotonic()
         wait_timeout = 120

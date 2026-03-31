@@ -7,7 +7,11 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
-from scripts.milestone01.crawl import SubstackNetworkCrawler
+from scripts.milestone01.crawl import (
+    SubstackNetworkCrawler,
+    extract_publication_info_from_post_metadata,
+    resolve_publication_url,
+)
 
 
 class _FakeNewsletter:
@@ -16,6 +20,56 @@ class _FakeNewsletter:
 
 
 class TestPublicationCrawlIntegrity(unittest.TestCase):
+    def test_post_metadata_fallback_recovers_custom_domain_publication_fields(self) -> None:
+        meta = {
+            "publication_id": 159185,
+            "description": "Start your day with pragmatic takes on politics and public policy.",
+            "canonical_url": "https://www.slowboring.com/p/testing-trumps-influence",
+            "publishedBylines": [
+                {
+                    "publicationUsers": [
+                        {
+                            "publication": {
+                                "id": 159185,
+                                "name": "Slow Boring",
+                                "subdomain": "matthewyglesias",
+                                "custom_domain": "www.slowboring.com",
+                                "hero_text": "Start your day with pragmatic takes on politics and public policy.",
+                            }
+                        }
+                    ]
+                }
+            ],
+        }
+
+        publication_info = extract_publication_info_from_post_metadata(meta)
+
+        self.assertEqual(159185, publication_info["id"])
+        self.assertEqual("Slow Boring", publication_info["name"])
+        self.assertEqual(
+            "Start your day with pragmatic takes on politics and public policy.",
+            publication_info["hero_text"],
+        )
+        self.assertEqual("matthewyglesias", publication_info["subdomain"])
+        self.assertEqual("www.slowboring.com", publication_info["custom_domain"])
+        self.assertEqual(
+            "https://www.slowboring.com",
+            resolve_publication_url("slowboring.com", publication_info),
+        )
+
+    def test_publication_url_resolution_prefers_substack_subdomain_when_available(self) -> None:
+        publication_info = {
+            "id": 35345,
+            "subdomain": "noahpinion",
+            "custom_domain": None,
+            "canonical_url": "https://www.noahpinion.blog/p/example",
+        }
+
+        self.assertEqual(
+            "https://noahpinion.substack.com",
+            resolve_publication_url("www.noahpinion.blog", publication_info),
+        )
+
     def test_core_schema_and_output_are_stable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "integrity.db")

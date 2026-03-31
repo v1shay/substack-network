@@ -29,7 +29,8 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
+from urllib.parse import urlparse
 
 import requests
 
@@ -131,6 +132,83 @@ except ImportError as exc:
     _NEWSLETTER_IMPORT_ERROR = exc
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _first_publication_from_post_metadata(meta: dict[str, Any]) -> dict[str, Any]:
+    publication = _as_dict(meta.get("publication"))
+    if publication:
+        return publication
+
+    bylines = meta.get("publishedBylines")
+    if not isinstance(bylines, list):
+        return {}
+
+    for byline_raw in bylines:
+        byline = _as_dict(byline_raw)
+        publication_users = byline.get("publicationUsers")
+        if not isinstance(publication_users, list):
+            continue
+        for publication_user_raw in publication_users:
+            publication_user = _as_dict(publication_user_raw)
+            publication = _as_dict(publication_user.get("publication"))
+            if publication:
+                return publication
+    return {}
+
+
+def extract_publication_info_from_post_metadata(meta: dict[str, Any]) -> dict[str, Any]:
+    publication = _first_publication_from_post_metadata(meta)
+    return {
+        "id": meta.get("publication_id") or publication.get("id"),
+        "name": publication.get("name") or meta.get("publication_name"),
+        "hero_text": publication.get("hero_text") or meta.get("description") or "",
+        "subdomain": publication.get("subdomain"),
+        "custom_domain": publication.get("custom_domain"),
+        "canonical_url": meta.get("canonical_url") or meta.get("url"),
+    }
+
+
+def resolve_publication_url(current_domain: str, publication_info: dict[str, Any] | None) -> str:
+    if publication_info:
+        custom_domain = _publication_host(publication_info.get("custom_domain"))
+        if custom_domain:
+            return f"https://{custom_domain}"
+
+        subdomain = _publication_subdomain(publication_info.get("subdomain"))
+        if subdomain:
+            return f"https://{subdomain}.substack.com"
+
+        canonical_host = _publication_host(publication_info.get("canonical_url"))
+        if canonical_host:
+            return f"https://{canonical_host}"
+    return domain_to_publication_url(current_domain)
+
+
+def _publication_host(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.startswith(("http://", "https://")):
+        parsed = urlparse(text)
+        host = parsed.netloc.strip().lower()
+        return host or None
+    host = text.split("/", 1)[0].strip().lower()
+    return host or None
+
+
+def _publication_subdomain(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    return text.split(".", 1)[0]
+
+
 class SubstackNetworkCrawler:
     """Network crawler using substack_api library."""
 
@@ -203,12 +281,7 @@ class SubstackNetworkCrawler:
             posts = newsletter.get_posts(limit=1)
             if posts:
                 meta = posts[0].get_metadata()
-                # Build minimal publication dict from post metadata
-                return {
-                    "id": meta.get("publication_id"),
-                    "name": meta.get("publication", {}).get("name") or meta.get("publication_name"),
-                    "hero_text": meta.get("publication", {}).get("hero_text") or "",
-                }
+                return extract_publication_info_from_post_metadata(meta)
         except Exception as e:
             print(f"   [!] Fallback from post metadata failed: {e}")
         return None
@@ -378,8 +451,9 @@ class SubstackNetworkCrawler:
                     count += 1
 
                     if enable_comments:
+                        publication_url = resolve_publication_url(current_domain, pub_info)
                         self.run_comment_enrichment(
-                            url,
+                            publication_url,
                             current_domain,
                             post_limit=comment_post_limit,
                             timeout=comment_timeout,
