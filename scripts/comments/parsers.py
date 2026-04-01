@@ -37,6 +37,8 @@ def extract_posts_from_archive(payload: Any) -> list[dict[str, Any]]:
             "title": raw.get("title"),
             "url": raw.get("canonical_url") or raw.get("url"),
             "published_at": raw.get("post_date") or raw.get("published_at") or raw.get("created_at"),
+            "comment_count": _int_or_none(raw.get("comment_count")),
+            "child_comment_count": _int_or_none(raw.get("child_comment_count")),
             "raw_json": json.dumps(raw, sort_keys=True, ensure_ascii=True),
         }
         posts.append(post)
@@ -162,3 +164,12 @@ def _string_or_none(value: Any) -> str | None:
     if isinstance(value, str):
         return value
     return str(value)
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

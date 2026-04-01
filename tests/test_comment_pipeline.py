@@ -137,8 +137,8 @@ class TestCommentPipeline(unittest.TestCase):
             timeout=15.0,
             retries=3,
             classify_commenters=False,
-            classify_max_users=75,
-            classify_workers=4,
+            classify_max_users=10,
+            classify_workers=1,
         )
         fake_conn.close.assert_called_once()
 
@@ -305,6 +305,62 @@ class TestCommentPipeline(unittest.TestCase):
             self.assertEqual(2, stats_again["comments_unique"])
             self.assertEqual(0, stats_again["comments_created"])
             self.assertEqual(0, stats_again["comments_updated"])
+            conn.close()
+
+    def test_process_comments_only_fetches_posts_with_comment_signal_when_available(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "pipeline_comment_signal.db")
+            crawler = SubstackNetworkCrawler(db_name=db_path)
+            conn = crawler.conn
+
+            base = "https://example.substack.com"
+            session = _FakeSession(
+                {
+                    f"{base}/api/v1/archive": [
+                        {
+                            "posts": [
+                                {
+                                    "id": "post-1",
+                                    "title": "Silent Post",
+                                    "canonical_url": f"{base}/p/post-1",
+                                    "publication_id": 10,
+                                    "comment_count": 0,
+                                    "child_comment_count": 0,
+                                },
+                                {
+                                    "id": "post-2",
+                                    "title": "Loud Post",
+                                    "canonical_url": f"{base}/p/post-2",
+                                    "publication_id": 10,
+                                    "comment_count": 4,
+                                    "child_comment_count": 2,
+                                },
+                            ],
+                            "has_more": False,
+                        }
+                    ],
+                    f"{base}/api/v1/post/post-2/comments": [
+                        {
+                            "comments": [
+                                {
+                                    "id": "comment-1",
+                                    "body": "hello",
+                                    "post_id": "post-2",
+                                    "user": {"id": "u-1", "name": "User", "handle": "user"},
+                                }
+                            ],
+                            "has_more": False,
+                        }
+                    ],
+                }
+            )
+
+            stats = process_comments(base, conn=conn, post_limit=20, session=session)
+            self.assertEqual(1, stats["posts_seen"])
+            self.assertEqual(1, stats["comments_fetched"])
+            requested_urls = [call[0] for call in session.calls]
+            self.assertNotIn(f"{base}/api/v1/post/post-1/comments", requested_urls)
+            self.assertIn(f"{base}/api/v1/post/post-2/comments", requested_urls)
             conn.close()
 
     def test_process_comments_raises_and_rolls_back_when_comment_fetch_fails(self):

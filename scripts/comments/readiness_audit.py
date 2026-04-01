@@ -27,7 +27,7 @@ from scripts.db_runtime import connect_db, ensure_schema
 
 
 DEFAULT_STAGE1 = {
-    "comment_post_limit": 10,
+    "comment_post_limit": 5,
     "classification_max_users": 100,
     "classification_workers": 4,
     "max_publications": 25,
@@ -36,7 +36,7 @@ DEFAULT_STAGE1 = {
 }
 
 DEFAULT_STAGE2 = {
-    "comment_post_limit": 20,
+    "comment_post_limit": 10,
     "classification_max_users": 250,
     "classification_workers": 4,
     "max_publications": 100,
@@ -73,7 +73,7 @@ class StageConfig:
     max_attempts: int | None
     delay: float
     enable_comments: bool = True
-    classify_commenters: bool = True
+    classify_commenters: bool = False
 
 
 def _repo_root() -> Path:
@@ -845,12 +845,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Minimum projected comments after 24 hours from stage 2 throughput.",
     )
     parser.add_argument("--stage1-comment-post-limit", type=int, default=DEFAULT_STAGE1["comment_post_limit"])
+    parser.add_argument("--stage1-classify-commenters", action="store_true")
     parser.add_argument("--stage1-classification-max-users", type=int, default=DEFAULT_STAGE1["classification_max_users"])
     parser.add_argument("--stage1-classification-workers", type=int, default=DEFAULT_STAGE1["classification_workers"])
     parser.add_argument("--stage1-max-publications", type=int, default=DEFAULT_STAGE1["max_publications"])
     parser.add_argument("--stage1-max-attempts", type=int, default=DEFAULT_STAGE1["max_attempts"])
     parser.add_argument("--stage1-delay", type=float, default=DEFAULT_STAGE1["delay"])
     parser.add_argument("--stage2-comment-post-limit", type=int, default=DEFAULT_STAGE2["comment_post_limit"])
+    parser.add_argument("--stage2-classify-commenters", action="store_true")
     parser.add_argument("--stage2-classification-max-users", type=int, default=DEFAULT_STAGE2["classification_max_users"])
     parser.add_argument("--stage2-classification-workers", type=int, default=DEFAULT_STAGE2["classification_workers"])
     parser.add_argument("--stage2-max-publications", type=int, default=DEFAULT_STAGE2["max_publications"])
@@ -953,6 +955,7 @@ def main(argv: list[str] | None = None) -> int:
         stage1 = StageConfig(
             name="stage1",
             comment_post_limit=args.stage1_comment_post_limit,
+            classify_commenters=args.stage1_classify_commenters,
             classification_max_users=args.stage1_classification_max_users,
             classification_workers=args.stage1_classification_workers,
             max_publications=args.stage1_max_publications,
@@ -976,6 +979,7 @@ def main(argv: list[str] | None = None) -> int:
         stage2 = StageConfig(
             name="stage2",
             comment_post_limit=args.stage2_comment_post_limit,
+            classify_commenters=args.stage2_classify_commenters,
             classification_max_users=args.stage2_classification_max_users,
             classification_workers=args.stage2_classification_workers,
             max_publications=args.stage2_max_publications,

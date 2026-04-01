@@ -23,8 +23,8 @@ class TestCrawlCommentIntegration(unittest.TestCase):
         *,
         enable_comments: bool,
         classify_commenters: bool = False,
-        classification_max_users: int = 25,
-        classification_workers: int = 4,
+        classification_max_users: int = 10,
+        classification_workers: int = 1,
         process_comments_side_effect=None,
         process_comments_return=None,
     ):
@@ -97,8 +97,8 @@ class TestCrawlCommentIntegration(unittest.TestCase):
         self.assertEqual(4.5, kwargs["timeout"])
         self.assertEqual(2, kwargs["retries"])
         self.assertFalse(kwargs["classify_commenters"])
-        self.assertEqual(25, kwargs["classify_max_users"])
-        self.assertEqual(4, kwargs["classify_workers"])
+        self.assertEqual(10, kwargs["classify_max_users"])
+        self.assertEqual(1, kwargs["classify_workers"])
         self.assertIn("[comments] domain=alpha posts_seen=1", output)
         self.assertIn("users_seen=2", output)
         self.assertIn("comments_created=3", output)

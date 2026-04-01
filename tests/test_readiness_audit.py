@@ -43,7 +43,7 @@ class TestReadinessAudit(unittest.TestCase):
             increases,
         )
 
-    def test_stage_command_includes_comment_and_classification_flags(self):
+    def test_stage_command_includes_comment_flags_without_classification_by_default(self):
         stage = readiness_audit.StageConfig(
             name="stage1",
             comment_post_limit=10,
@@ -55,11 +55,26 @@ class TestReadinessAudit(unittest.TestCase):
         )
         cmd = readiness_audit._stage_command(Path("/repo"), "config/seeds.md", stage)
         self.assertIn("--enable-comments", cmd)
-        self.assertIn("--classify-commenters", cmd)
         self.assertIn("--comment-post-limit", cmd)
-        self.assertIn("--classification-max-users", cmd)
         self.assertIn("--max-publications", cmd)
         self.assertIn("--max-attempts", cmd)
+        self.assertNotIn("--classify-commenters", cmd)
+
+    def test_stage_command_includes_classification_flags_when_enabled(self):
+        stage = readiness_audit.StageConfig(
+            name="stage2",
+            comment_post_limit=10,
+            classify_commenters=True,
+            classification_max_users=100,
+            classification_workers=4,
+            max_publications=25,
+            max_attempts=60,
+            delay=0.25,
+        )
+
+        cmd = readiness_audit._stage_command(Path("/repo"), "config/seeds.md", stage)
+        self.assertIn("--classify-commenters", cmd)
+        self.assertIn("--classification-max-users", cmd)
 
     def test_audit_delta_metadata_allows_explicit_edge_cases(self):
         with tempfile.TemporaryDirectory() as tmpdir:

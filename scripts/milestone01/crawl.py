@@ -364,8 +364,8 @@ class SubstackNetworkCrawler:
         comment_timeout: float = 15.0,
         comment_retries: int = 3,
         classify_commenters: bool = False,
-        classification_max_users: int = 25,
-        classification_workers: int = 4,
+        classification_max_users: int = 10,
+        classification_workers: int = 1,
     ):
         """
         Crawl network using Newsletter API.
@@ -589,16 +589,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--classification-max-users",
         type=int,
-        default=25,
+        default=10,
         metavar="N",
-        help="Max unique commenter handles to classify per publication when classification is enabled (default: 25).",
+        help="Max unique commenter handles to classify per publication when classification is enabled (default: 10).",
     )
     parser.add_argument(
         "--classification-workers",
         type=int,
-        default=4,
+        default=1,
         metavar="N",
-        help="Worker threads for commenter profile lookups when classification is enabled (default: 4).",
+        help="Worker threads for commenter profile lookups when classification is enabled (default: 1).",
     )
     args = parser.parse_args()
 

@@ -58,6 +58,9 @@ def discover_posts(
         session=session,
     )
     posts = extract_posts_from_archive(archive_payload)
+    comment_candidate_posts = _comment_candidate_posts(posts)
+    if comment_candidate_posts:
+        posts = comment_candidate_posts
     if limit >= 0:
         posts = posts[:limit]
     LOG.info("[comments] parsing success: posts=%s publication=%s", len(posts), publication_url)
@@ -94,8 +97,8 @@ def process_comments(
     retries: int = 3,
     session: Any | None = None,
     classify_commenters: bool = False,
-    classify_max_users: int = 75,
-    classify_workers: int = 4,
+    classify_max_users: int = 10,
+    classify_workers: int = 1,
     classification_timeout: float = 10.0,
     classification_retries: int = 2,
     classification_session: Any | None = None,
@@ -110,6 +113,8 @@ def process_comments(
     ensure_schema(conn)
     stats = {
         "posts_seen": 0,
+        "posts_with_comment_signal": 0,
+        "posts_skipped_no_comment_signal": 0,
         "posts_created": 0,
         "posts_updated": 0,
         "users_seen": 0,
@@ -137,6 +142,7 @@ def process_comments(
             session=session,
         )
         stats["posts_seen"] = len(posts)
+        stats["posts_with_comment_signal"] = len(posts)
 
         for post in posts:
             post_result = insert_post_if_not_exists(conn, post)
@@ -259,6 +265,35 @@ def _dedupe_comments(comments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return unique_comments
 
 
+def _comment_signal_value(post: dict[str, Any], key: str) -> int:
+    value = post.get(key)
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _comment_candidate_posts(posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ranked_posts: list[tuple[int, int, dict[str, Any]]] = []
+    posts_with_signal = 0
+    for index, post in enumerate(posts):
+        comment_count = _comment_signal_value(post, "comment_count")
+        child_comment_count = _comment_signal_value(post, "child_comment_count")
+        signal = max(comment_count, child_comment_count)
+        if signal <= 0:
+            continue
+        posts_with_signal += 1
+        ranked_posts.append((-signal, index, post))
+
+    if posts_with_signal == 0:
+        return posts
+
+    ranked_posts.sort()
+    return [post for _, _, post in ranked_posts]
+
+
 def _record_write_action(actions: dict[int, str], row_id: int | None, action: str) -> None:
     if row_id is None:
         return
@@ -315,16 +350,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--classification-max-users",
         type=int,
-        default=75,
+        default=10,
         metavar="N",
-        help="Maximum distinct commenter handles to classify (default: 75).",
+        help="Maximum distinct commenter handles to classify (default: 10).",
     )
     parser.add_argument(
         "--classification-workers",
         type=int,
-        default=4,
+        default=1,
         metavar="N",
-        help="Worker threads for profile lookups when classification is enabled (default: 4).",
+        help="Worker threads for profile lookups when classification is enabled (default: 1).",
     )
     return parser
 
