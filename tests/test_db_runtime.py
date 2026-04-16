@@ -259,6 +259,37 @@ class TestDBRuntime(unittest.TestCase):
             self.assertTrue(schema_is_current(migrated))
             migrated.close()
 
+    def test_read_only_audit_does_not_migrate_live_db(self):
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "readonly-audit.db"
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                """
+                CREATE TABLE publications (
+                    id INTEGER PRIMARY KEY,
+                    substack_id TEXT UNIQUE,
+                    name TEXT,
+                    domain TEXT NOT NULL UNIQUE,
+                    description TEXT,
+                    first_seen TIMESTAMP
+                )
+                """
+            )
+            conn.commit()
+            conn.close()
+
+            counts = audit_db(db_path, read_only=True)
+
+            self.assertEqual(1, counts["schema_version_missing"])
+            post = sqlite3.connect(db_path)
+            try:
+                row = post.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'"
+                ).fetchone()
+                self.assertIsNone(row)
+            finally:
+                post.close()
+
 
 if __name__ == "__main__":
     unittest.main()
