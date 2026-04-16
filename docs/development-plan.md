@@ -44,6 +44,8 @@ One workflow: crawl the recommendation graph, inspect or export the DB, compute 
 | `scripts/milestone02/layer_stats.py` | Compute layer sizes L(d), accumulation A(d), growth ratio r(d), L'(d) from queue. Writes data/layer_stats.html (table + chart). |
 | `scripts/milestone02/topic_labels_db.py` | Shared DB schema for topic labels (publication_topics table). Used by label_topics_llm and label_topics_cluster. |
 | `scripts/milestone02/label_topics_llm.py` | Label publications by topic using an LLM and a fixed label list; writes to publication_topics.topic_llm. |
+| `scripts/comments/comment_backfill.py` | Durable comment backfill for existing publications; writes batch and per-publication status rows. |
+| `scripts/comments/semantic_embeddings.py` | Optional embedding batches for comments, posts, and publications; stores model-versioned vectors for future semantic graph work. |
 
 **`scripts/update_graph.py`** — One-shot pipeline to refresh the recommendation graph and UI from the current DB. Run from repo root.
 

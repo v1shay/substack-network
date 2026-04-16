@@ -4,7 +4,7 @@
 
 `cartographer.db` is a **SQLite** database created automatically when you use the crawler or retry script:
 
-- **Script:** `scripts/milestone01/crawl.py` creates the DB (if missing) and the tables **publications**, **recommendations**, and **queue**.
+- **Script:** `scripts/milestone01/crawl.py` creates the DB (if missing) and the core crawl/comment tables.
 - **When:** On first run, `SubstackNetworkCrawler(db_name="cartographer.db")` connects to the file and calls `create_schema()`.
 - **unfailed:** The table **unfailed** is created by `scripts/milestone02/retry_failed.py` on first run (that script owns it).
 - **Location:** The DB is at **repo root** (`cartographer.db`). Run scripts from repo root; or set `CARTOGRAPHER_ROOT` to the repo root.
@@ -16,6 +16,13 @@
 | **publications** | One row per Substack publication (id, name, domain, description, first_seen) |
 | **recommendations** | Edges: source_domain → target_domain (who recommends whom) |
 | **queue** | Crawl queue: domain, status ('pending'/'crawled'/'failed'), depth |
+| **users** | Commenter/user identities observed during comment ingestion |
+| **posts** | Archive posts scanned by comment ingestion |
+| **comments** | Normalized comment rows linked to posts and users |
+| **comment_ingestion_runs** | Batch-level tracking for historical comment backfills |
+| **comment_publication_status** | Per-publication backfill status, attempts, stats, and latest error |
+| **semantic_embedding_runs** | Batch-level tracking for semantic embedding jobs |
+| **semantic_embeddings** | Model-versioned embeddings for comments, posts, or publications |
 | **unfailed** | Domains that were failed and later successfully retried by retry_failed.py (audit) |
 
 **Note on “domain” in publications:** The `domain` column is our unique identifier (Substack subdomain or custom domain). Many Substack publications are author-led, so that identifier is often a person’s handle (e.g. `erictopol`, `cameronrwolfe`) rather than a branded site name. Each row is still one publication (one newsletter); the `name` column, when present, is the display name from the API (publication title or author name).
@@ -49,6 +56,33 @@
 | status | TEXT | 'pending', 'crawled', or 'failed' |
 | depth | INTEGER | BFS depth when enqueued |
 
+**comment_publication_status**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| domain | TEXT | PRIMARY KEY; publication domain being backfilled |
+| publication_substack_id | TEXT | Publication id copied from publications when available |
+| status | TEXT | 'pending', 'running', 'succeeded', or 'failed' |
+| attempts | INTEGER | Number of backfill attempts |
+| last_attempt_at | TIMESTAMP | Last attempt start time |
+| last_success_at | TIMESTAMP | Last successful completion time |
+| posts_seen / users_seen / comments_unique | INTEGER | Latest pipeline stats |
+| comments_created / comments_updated | INTEGER | Latest write stats |
+| last_error | TEXT | Latest failure message |
+| updated_at | TIMESTAMP | Last status update |
+
+**semantic_embeddings**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| source_table | TEXT | 'comments', 'posts', or 'publications' |
+| source_id | INTEGER | Row id in the source table |
+| source_hash | TEXT | SHA-256 hash of normalized source text |
+| model | TEXT | Embedding model name |
+| dimensions | INTEGER | Vector dimensions |
+| embedding_json | TEXT | JSON-encoded vector |
+| embedded_at | TIMESTAMP | When the row was embedded |
+
 **unfailed**
 
 | Column | Type | Notes |
@@ -68,6 +102,9 @@ For what **depth** means and how the crawler avoids loops, see [bfs.md](./bfs.md
 sqlite3 cartographer.db "SELECT 'publications' AS table_name, COUNT(*) AS rows FROM publications
   UNION ALL SELECT 'recommendations', COUNT(*) FROM recommendations
   UNION ALL SELECT 'queue', COUNT(*) FROM queue
+  UNION ALL SELECT 'users', COUNT(*) FROM users
+  UNION ALL SELECT 'posts', COUNT(*) FROM posts
+  UNION ALL SELECT 'comments', COUNT(*) FROM comments
   UNION ALL SELECT 'unfailed', COUNT(*) FROM unfailed;"
 
 # Show all data (if small)

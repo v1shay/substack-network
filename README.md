@@ -13,6 +13,7 @@ python scripts/update_graph.py
 ```
 
 **Note:** `update_graph.py` starts the crawler in the background (if it isn’t already running) so the DB keeps updating; the rest of the pipeline uses the current DB and exits. The crawler keeps running after you close the terminal. To stop it: `pkill -f "crawl.py"` (or `pgrep -f "crawl.py"` to get the process ID, then `kill <pid>`).
+The background crawl now starts with comment enrichment enabled by default, and detached crawler output is written to `log/crawler.log`.
 
 Here is an example workflow calling the scripts separately:
 
@@ -83,6 +84,42 @@ python scripts/comments/comment_pipeline.py paulkrugman.substack.com --post-limi
 ```
 
 - **comment_pipeline.py** — Thin standalone CLI wrapper around the same `process_comments(...)` pipeline used by `crawl.py --enable-comments`. By default it writes to `CARTOGRAPHER_ROOT/cartographer.db` (or `./cartographer.db` if `CARTOGRAPHER_ROOT` is unset). Use `--db path/to/cartographer.db` to target another SQLite file.
+
+### Comment backfill (already-crawled publications)
+
+`crawl.py --enable-comments` enriches only publications as they are newly crawled. To populate comments for publications already in `cartographer.db`, use the durable backfill runner:
+
+```bash
+# Preview targets without writes or network calls:
+python scripts/comments/comment_backfill.py --dry-run --limit 50
+
+# Safe pilot: 50 publications, 3 posts each, 1s delay:
+python scripts/comments/comment_backfill.py --limit 50 --post-limit 3 --delay 1
+```
+
+- **comment_backfill.py** — Iterates over existing `publications`, calls the same `process_comments(...)` pipeline, and records resumable status in `comment_ingestion_runs` and `comment_publication_status`.
+- See [docs/comment-backfill.md](docs/comment-backfill.md) for retry behavior, status summaries, and pre-scale gates.
+
+### Semantic embeddings (optional)
+
+```bash
+# Validate OpenAI config and candidate rows without API calls:
+python scripts/comments/semantic_embeddings.py --check-config --source comments --limit 10
+
+# Preview rows needing embeddings:
+python scripts/comments/semantic_embeddings.py --dry-run --source comments --limit 100
+```
+
+- **semantic_embeddings.py** — Stores model-versioned embeddings for comments, posts, or publications in `semantic_embeddings`; it does not change the recommendation graph visualization.
+- See [docs/semantic-embeddings.md](docs/semantic-embeddings.md).
+
+### Live ingestion validation
+
+```bash
+python scripts/comments/validate_live_ingestion.py paulkrugman.substack.com --post-limit 1
+```
+
+- **validate_live_ingestion.py** — Runs the real archive/comment endpoints for one publication, persists results to SQLite, verifies `users`, `posts`, and `comments` are populated, checks reply linkage and publication joins, and prints sample rows from the DB.
 
 ### PageRank and visualization
 
