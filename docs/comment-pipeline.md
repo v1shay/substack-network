@@ -75,6 +75,17 @@ Behavior:
 - On success it prints one concise stats summary and exits `0`; true empty results still count as success.
 - Fatal archive/comment fetch failures and other CLI/runtime failures exit `1`.
 
+## Historical backfill
+
+Use `scripts/comments/comment_backfill.py` when the publication already exists in the DB and needs comments populated. It reuses `process_comments(...)` but records durable batch and publication status so large runs can resume safely.
+
+```bash
+python scripts/comments/comment_backfill.py --dry-run --limit 50
+python scripts/comments/comment_backfill.py --limit 50 --post-limit 3 --delay 1
+```
+
+See [comment-backfill.md](./comment-backfill.md).
+
 ## Running tests
 
 From repo root:
@@ -117,6 +128,13 @@ Run anomaly audit only:
 ```bash
 source .venv/bin/activate
 python scripts/comments/db_audit.py --fail-on-anomaly
+```
+
+Run a non-mutating production audit:
+
+```bash
+source .venv/bin/activate
+python scripts/comments/db_audit.py --read-only --fail-on-anomaly
 ```
 
 Apply targeted repair rules only:
