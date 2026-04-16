@@ -290,6 +290,47 @@ class TestDBRuntime(unittest.TestCase):
             finally:
                 post.close()
 
+    def test_read_only_audit_reports_drift_instead_of_crashing_on_missing_columns(self):
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "legacy-comments.db"
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                """
+                CREATE TABLE schema_version (
+                    singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                    version INTEGER NOT NULL,
+                    updated_at TIMESTAMP NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO schema_version (singleton, version, updated_at) VALUES (1, 1, '2026-01-01T00:00:00Z')"
+            )
+            conn.execute(
+                """
+                CREATE TABLE comments (
+                    id INTEGER PRIMARY KEY,
+                    external_comment_id TEXT UNIQUE,
+                    post_id INTEGER,
+                    user_id INTEGER,
+                    parent_comment_id INTEGER,
+                    body TEXT,
+                    commented_at TIMESTAMP,
+                    raw_json TEXT,
+                    first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            conn.commit()
+            conn.close()
+
+            counts = audit_db(db_path, read_only=True)
+
+            self.assertEqual(1, counts["schema_version_mismatch"])
+            self.assertGreater(counts["schema_drift_tables"], 0)
+            self.assertEqual(0, counts["comments_broken_parent_external_comment_id"])
+
 
 if __name__ == "__main__":
     unittest.main()

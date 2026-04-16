@@ -337,7 +337,14 @@ def compute_anomaly_counts(conn: sqlite3.Connection) -> dict[str, int]:
         if not set(required_tables).issubset(existing_tables):
             counts[name] = 0
             continue
-        cur.execute(query)
+        try:
+            cur.execute(query)
+        except sqlite3.OperationalError:
+            # Legacy/drifted schemas may have the table but not the expected
+            # columns. schema_drift_tables is the authoritative signal; keep
+            # read-only audits non-mutating and non-crashing.
+            counts[name] = 0
+            continue
         counts[name] = int(cur.fetchone()[0])
     return counts
 
