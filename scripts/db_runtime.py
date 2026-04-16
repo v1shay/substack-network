@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 QUEUE_STATUSES = ("pending", "crawled", "failed")
+CORE_TABLES = ("publications", "recommendations", "queue", "users", "posts", "comments")
 
 
 def connect_db(db_path: str | Path) -> sqlite3.Connection:
@@ -21,14 +22,52 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     if _is_current_schema(conn):
         return
 
-    legacy_tables = _existing_tables(conn)
+    existing_tables = _existing_tables(conn)
+    current_version = _read_schema_version(conn, existing_tables)
     conn.execute("PRAGMA foreign_keys = OFF")
     try:
-        if legacy_tables & {"publications", "recommendations", "queue", "users", "posts", "comments"}:
-            _migrate_legacy_schema(conn)
-        else:
+        if not existing_tables & set(CORE_TABLES):
             _create_schema(conn)
             _set_schema_version(conn, SCHEMA_VERSION)
+        elif current_version is None:
+            _migrate_legacy_schema(conn)
+        else:
+            _upgrade_schema(conn, current_version)
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
+def _upgrade_schema(conn: sqlite3.Connection, current_version: int) -> None:
+    if current_version > SCHEMA_VERSION:
+        raise RuntimeError(
+            f"Database schema version {current_version} is newer than this code supports ({SCHEMA_VERSION})."
+        )
+
+    if current_version < 2:
+        # Version 2 adds operational state for large comment backfills and
+        # semantic embedding batches. Core crawl/comment table columns are unchanged.
+        _create_schema(conn)
+        _set_schema_version(conn, SCHEMA_VERSION)
+        return
+
+    if current_version == SCHEMA_VERSION:
+        # Heal missing sidecar tables/indexes for partially applied migrations.
+        _create_schema(conn)
+        _set_schema_version(conn, SCHEMA_VERSION)
+        return
+
+
+def ensure_sidecar_schema(conn: sqlite3.Connection) -> None:
+    """Create v2 sidecar tables without migrating legacy core tables.
+
+    Readiness tools use this only after they know the core schema is usable.
+    Normal callers should prefer ensure_schema(...).
+    """
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        _create_schema(conn)
+        _set_schema_version(conn, SCHEMA_VERSION)
         conn.commit()
     finally:
         conn.execute("PRAGMA foreign_keys = ON")
@@ -78,6 +117,62 @@ def expected_schema_columns() -> dict[str, tuple[str, ...]]:
             "raw_json",
             "first_seen",
             "last_seen",
+        ),
+        "comment_ingestion_runs": (
+            "id",
+            "started_at",
+            "finished_at",
+            "mode",
+            "status",
+            "post_limit",
+            "target_limit",
+            "delay_seconds",
+            "error",
+            "notes",
+        ),
+        "comment_publication_status": (
+            "domain",
+            "publication_substack_id",
+            "status",
+            "attempts",
+            "last_attempt_at",
+            "next_retry_at",
+            "last_success_at",
+            "posts_seen",
+            "posts_created",
+            "posts_updated",
+            "users_seen",
+            "users_created",
+            "users_updated",
+            "comments_fetched",
+            "comments_unique",
+            "comments_created",
+            "comments_updated",
+            "last_error",
+            "updated_at",
+        ),
+        "semantic_embedding_runs": (
+            "id",
+            "started_at",
+            "finished_at",
+            "source_table",
+            "model",
+            "status",
+            "target_limit",
+            "processed",
+            "embedded",
+            "skipped",
+            "error",
+        ),
+        "semantic_embeddings": (
+            "id",
+            "source_table",
+            "source_id",
+            "source_hash",
+            "model",
+            "dimensions",
+            "embedding_json",
+            "embedded_at",
         ),
     }
 
@@ -206,13 +301,95 @@ def _create_schema(conn: sqlite3.Connection) -> None:
     c.execute("CREATE INDEX IF NOT EXISTS idx_comments_parent_external_comment_id ON comments(parent_external_comment_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_comments_commented_at ON comments(commented_at)")
 
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS comment_ingestion_runs (
+            id INTEGER PRIMARY KEY,
+            started_at TIMESTAMP NOT NULL,
+            finished_at TIMESTAMP,
+            mode TEXT NOT NULL,
+            status TEXT NOT NULL,
+            post_limit INTEGER NOT NULL,
+            target_limit INTEGER,
+            delay_seconds REAL NOT NULL DEFAULT 0,
+            error TEXT,
+            notes TEXT
+        )
+        """
+    )
+
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS comment_publication_status (
+            domain TEXT PRIMARY KEY,
+            publication_substack_id TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            last_attempt_at TIMESTAMP,
+            next_retry_at TIMESTAMP,
+            last_success_at TIMESTAMP,
+            posts_seen INTEGER NOT NULL DEFAULT 0,
+            posts_created INTEGER NOT NULL DEFAULT 0,
+            posts_updated INTEGER NOT NULL DEFAULT 0,
+            users_seen INTEGER NOT NULL DEFAULT 0,
+            users_created INTEGER NOT NULL DEFAULT 0,
+            users_updated INTEGER NOT NULL DEFAULT 0,
+            comments_fetched INTEGER NOT NULL DEFAULT 0,
+            comments_unique INTEGER NOT NULL DEFAULT 0,
+            comments_created INTEGER NOT NULL DEFAULT 0,
+            comments_updated INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            updated_at TIMESTAMP NOT NULL
+        )
+        """
+    )
+
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS semantic_embedding_runs (
+            id INTEGER PRIMARY KEY,
+            started_at TIMESTAMP NOT NULL,
+            finished_at TIMESTAMP,
+            source_table TEXT NOT NULL,
+            model TEXT NOT NULL,
+            status TEXT NOT NULL,
+            target_limit INTEGER,
+            processed INTEGER NOT NULL DEFAULT 0,
+            embedded INTEGER NOT NULL DEFAULT 0,
+            skipped INTEGER NOT NULL DEFAULT 0,
+            error TEXT
+        )
+        """
+    )
+
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS semantic_embeddings (
+            id INTEGER PRIMARY KEY,
+            source_table TEXT NOT NULL,
+            source_id INTEGER NOT NULL,
+            source_hash TEXT NOT NULL,
+            model TEXT NOT NULL,
+            dimensions INTEGER NOT NULL,
+            embedding_json TEXT NOT NULL,
+            embedded_at TIMESTAMP NOT NULL
+        )
+        """
+    )
+
+    c.execute("CREATE INDEX IF NOT EXISTS idx_comment_publication_status_status ON comment_publication_status(status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_comment_publication_status_updated_at ON comment_publication_status(updated_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_semantic_embedding_runs_source ON semantic_embedding_runs(source_table, model, status)")
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_semantic_embeddings_unique_source_model ON semantic_embeddings(source_table, source_id, model)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_semantic_embeddings_hash ON semantic_embeddings(source_table, source_hash, model)")
+
 
 def _migrate_legacy_schema(conn: sqlite3.Connection) -> None:
     c = conn.cursor()
 
     legacy = {
         name: name
-        for name in ("publications", "recommendations", "queue", "users", "posts", "comments")
+        for name in CORE_TABLES
         if name in _existing_tables(conn)
     }
     for table_name in legacy.values():
@@ -357,11 +534,21 @@ def _migrate_legacy_schema(conn: sqlite3.Connection) -> None:
             """
         )
 
-    for table_name in ("publications", "recommendations", "queue", "users", "posts", "comments"):
+    for table_name in CORE_TABLES:
         if f"__legacy_{table_name}" in _existing_tables(conn):
             c.execute(f"DROP TABLE __legacy_{table_name}")
 
     _set_schema_version(conn, SCHEMA_VERSION)
+
+
+def _read_schema_version(conn: sqlite3.Connection, existing_tables: set[str] | None = None) -> int | None:
+    tables = existing_tables if existing_tables is not None else _existing_tables(conn)
+    if "schema_version" not in tables:
+        return None
+    row = conn.execute("SELECT version FROM schema_version WHERE singleton = 1").fetchone()
+    if row is None:
+        return None
+    return int(row[0])
 
 
 def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
