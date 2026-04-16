@@ -342,10 +342,15 @@ def compute_anomaly_counts(conn: sqlite3.Connection) -> dict[str, int]:
     return counts
 
 
-def audit_db(db_path: Path | str) -> dict[str, int]:
-    conn = connect_db(str(db_path))
+def audit_db(db_path: Path | str, *, read_only: bool = False) -> dict[str, int]:
+    if read_only:
+        conn = sqlite3.connect(f"file:{Path(db_path).resolve()}?mode=ro", uri=True)
+        conn.execute("PRAGMA foreign_keys = ON")
+    else:
+        conn = connect_db(str(db_path))
     try:
-        ensure_schema(conn)
+        if not read_only:
+            ensure_schema(conn)
         return compute_anomaly_counts(conn)
     finally:
         conn.close()
@@ -427,13 +432,18 @@ def main() -> int:
         help="Print JSON output.",
     )
     parser.add_argument(
+        "--read-only",
+        action="store_true",
+        help="Open the SQLite file in read-only mode and do not run schema migrations.",
+    )
+    parser.add_argument(
         "--fail-on-anomaly",
         action="store_true",
         help="Exit 1 if any anomaly counter is non-zero.",
     )
     args = parser.parse_args()
 
-    summary = summarize(audit_db(Path(args.db)))
+    summary = summarize(audit_db(Path(args.db), read_only=args.read_only))
     if args.json:
         print(json.dumps(summary, indent=2, sort_keys=True))
     else:
