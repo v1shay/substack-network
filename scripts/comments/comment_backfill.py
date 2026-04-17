@@ -20,6 +20,12 @@ if str(_CODE_ROOT) not in sys.path:
 from scripts.comments.comment_pipeline import process_comments
 from scripts.crawl_persistence import domain_to_publication_url
 from scripts.db_runtime import connect_db, ensure_schema
+from scripts.utils.preflight import (
+    acquire_backfill_lock,
+    release_backfill_lock,
+    verify_backup_exists,
+    verify_schema_ready,
+)
 
 
 DEFAULT_POST_LIMIT = 3
@@ -282,11 +288,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     else:
+        verify_backup_exists(db_path)
         conn = connect_db(db_path)
 
+    lock_acquired = False
     try:
         if not args.dry_run:
             ensure_schema(conn)
+            verify_schema_ready(conn)
+            acquire_backfill_lock(conn)
+            lock_acquired = True
 
         if args.summary:
             summary = summarize_backfill_state(conn)
@@ -331,6 +342,8 @@ def main(argv: list[str] | None = None) -> int:
             notes=args.notes,
         )
     finally:
+        if lock_acquired:
+            release_backfill_lock(conn)
         conn.close()
 
     print(
