@@ -7,15 +7,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 QUEUE_STATUSES = ("pending", "crawled", "failed")
 CORE_TABLES = ("publications", "recommendations", "queue", "users", "posts", "comments")
 
 
 def connect_db(db_path: str | Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(db_path))
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn = sqlite3.connect(str(db_path), timeout=5.0)
+    configure_sqlite_runtime(conn)
     return conn
+
+
+def configure_sqlite_runtime(conn: sqlite3.Connection) -> None:
+    """Configure SQLite for long-running ingestion safety."""
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA foreign_keys = ON")
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
@@ -44,9 +52,10 @@ def _upgrade_schema(conn: sqlite3.Connection, current_version: int) -> None:
             f"Database schema version {current_version} is newer than this code supports ({SCHEMA_VERSION})."
         )
 
-    if current_version < 2:
-        # Version 2 adds operational state for large comment backfills and
-        # semantic embedding batches. Core crawl/comment table columns are unchanged.
+    if current_version < SCHEMA_VERSION:
+        # Version 2 added operational state for comment backfills and
+        # semantic embedding batches. Version 3 adds ingestion safety
+        # preflight state. Core crawl/comment table columns are unchanged.
         _create_schema(conn)
         _set_schema_version(conn, SCHEMA_VERSION)
         return
@@ -80,6 +89,7 @@ def schema_is_current(conn: sqlite3.Connection) -> bool:
 def expected_schema_columns() -> dict[str, tuple[str, ...]]:
     return {
         "schema_version": ("singleton", "version", "updated_at"),
+        "schema_migrations": ("version", "applied_at"),
         "publications": ("id", "substack_id", "name", "domain", "description", "first_seen"),
         "recommendations": ("id", "source_domain", "target_domain"),
         "queue": ("domain", "status", "depth"),
@@ -151,6 +161,12 @@ def expected_schema_columns() -> dict[str, tuple[str, ...]]:
             "last_error",
             "updated_at",
         ),
+        "backfill_lock": (
+            "id",
+            "is_locked",
+            "locked_at",
+            "owner_pid",
+        ),
         "semantic_embedding_runs": (
             "id",
             "started_at",
@@ -202,6 +218,15 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
             version INTEGER NOT NULL,
             updated_at TIMESTAMP NOT NULL
+        )
+        """
+    )
+
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            applied_at TIMESTAMP NOT NULL
         )
         """
     )
@@ -341,6 +366,24 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             last_error TEXT,
             updated_at TIMESTAMP NOT NULL
         )
+        """
+    )
+
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS backfill_lock (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            is_locked INTEGER NOT NULL DEFAULT 0 CHECK (is_locked IN (0, 1)),
+            locked_at TIMESTAMP,
+            owner_pid TEXT
+        )
+        """
+    )
+    c.execute(
+        """
+        INSERT INTO backfill_lock (id, is_locked)
+        VALUES (1, 0)
+        ON CONFLICT(id) DO NOTHING
         """
     )
 
@@ -552,6 +595,15 @@ def _read_schema_version(conn: sqlite3.Connection, existing_tables: set[str] | N
 
 
 def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
+    now = _now_iso()
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            applied_at TIMESTAMP NOT NULL
+        )
+        """
+    )
     conn.execute(
         """
         INSERT INTO schema_version (singleton, version, updated_at)
@@ -560,7 +612,16 @@ def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
             version = excluded.version,
             updated_at = excluded.updated_at
         """,
-        (version, _now_iso()),
+        (version, now),
+    )
+    conn.execute(
+        """
+        INSERT INTO schema_migrations (version, applied_at)
+        VALUES (?, ?)
+        ON CONFLICT(version) DO UPDATE SET
+            applied_at = excluded.applied_at
+        """,
+        (str(version), now),
     )
 
 
