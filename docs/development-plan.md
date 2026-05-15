@@ -6,7 +6,7 @@ Discover and catalog the network of publications and recommendations.
 
 Everything we have so far lives under **`scripts/milestone01/`** plus **`scripts/gh_pages.py`**. 
 
-One workflow: crawl the recommendation graph, inspect or export the DB, compute PageRank, build an interactive graph, and publish it.
+One workflow: crawl the recommendation graph, inspect or export the DB, compute RecommendationRank, build an interactive graph, and publish it.
 
 ### Scripts
 
@@ -16,8 +16,8 @@ One workflow: crawl the recommendation graph, inspect or export the DB, compute 
 | `scripts/milestone01/view_db.py` | Print all tables (or `--counts`). DB path from repo root or `CARTOGRAPHER_ROOT`. |
 | `scripts/milestone01/summarize_db.py` | Row counts and queue status only. |
 | `scripts/milestone01/db_to_csv.py` | Export tables to CSV in `data/`. |
-| `scripts/milestone01/centrality.py` | PageRank (and in-degree) on recommendation graph; top-N table and optional CSV. |
-| `scripts/milestone01/visualize.py` | Interactive HTML graph (pyvis): node size = PageRank, click node → open Substack archive. Output: `data/substack_graph.html`, plus `index.html` at repo root. |
+| `scripts/milestone01/centrality.py` | RecommendationRank (PageRank over recommendation edges) and in-degree on recommendation graph; top-N table and optional CSV. |
+| `scripts/milestone01/visualize.py` | Interactive HTML graph (pyvis): node size = RecommendationRank, click node → open Substack archive. Output: `data/substack_graph.html`, plus `index.html` at repo root. |
 | `scripts/gh_pages.py` | Prepare and push branch for static hosting (e.g. Codeberg Pages). |
 
 ### Database and paths
@@ -50,7 +50,7 @@ One workflow: crawl the recommendation graph, inspect or export the DB, compute 
 **`scripts/update_graph.py`** — One-shot pipeline to refresh the recommendation graph and UI from the current DB. Run from repo root.
 
 1. **Crawl** — If no crawl is running (no `.crawler.lock` or PID dead), starts `crawl.py` in the background (detached with `start_new_session=True` and stdio redirected away from the caller so it keeps running quietly after the script and terminal close). Does not wait for the crawl; graph and lists use whatever is in the DB now.
-2. **Centrality** — Runs `centrality.py` (PageRank, top-N).
+2. **Centrality** — Runs `centrality.py` (RecommendationRank, top-N).
 3. **Visualize** — Runs `visualize.py` (interactive graph → `data/substack_graph.html`, `index.html`).
 4. **Add publication lists** — Runs `add_publication_lists.py` (graph-publications.html, db-publications.html, links in index.html).
 5. **Layer stats** — Runs `layer_stats.py` (L(d), r(d), etc. → `data/layer_stats.html`).

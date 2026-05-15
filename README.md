@@ -2,7 +2,7 @@
 
 Maps the Substack network: crawl publications and recommendations, then analyze and visualize.
 
-[View the visualization](https://alexhkurz.codeberg.page/substack-cartographer/): opens in a browser; size of a node in the graph represents the centrality (PageRank); use two fingers to zoom; press Shift to freeze, click a node to open its Substack page. See also [docs/visualization.md](docs/visualization.md).
+[View the visualization](https://alexhkurz.codeberg.page/substack-cartographer/): opens in a browser; size of a node in the graph represents RecommendationRank, which is PageRank over directed publication recommendation edges; use two fingers to zoom; press Shift to freeze, click a node to open its Substack page. See also [docs/visualization.md](docs/visualization.md).
 
 **Summary of commands to make the graph** (run from repo root; `cartographer.db` is at repo root):
 
@@ -121,29 +121,29 @@ python scripts/comments/validate_live_ingestion.py paulkrugman.substack.com --po
 
 - **validate_live_ingestion.py** — Runs the real archive/comment endpoints for one publication, persists results to SQLite, verifies `users`, `posts`, and `comments` are populated, checks reply linkage and publication joins, and prints sample rows from the DB.
 
-### PageRank and visualization
+### RecommendationRank and visualization
 
 ```bash
 python scripts/milestone01/centrality.py
-python scripts/milestone01/centrality.py -n 100 -o data/pagerank.csv
+python scripts/milestone01/centrality.py -n 100 -o data/recommendation_rank.csv
 python scripts/milestone01/visualize.py
 python scripts/milestone01/visualize.py -n 200 -o data/substack_graph.html
 ```
 
-- **centrality.py:** PageRank on the recommendation graph; prints top-N and optional CSV.
-- **visualize.py:** Builds an interactive HTML graph (pyvis): node size = PageRank, hover for details. Output: `data/substack_graph.html` by default. Open in a browser to zoom, pan, and explore.
+- **centrality.py:** RecommendationRank, defined as PageRank on the directed recommendation graph; prints top-N and optional CSV.
+- **visualize.py:** Builds an interactive HTML graph (pyvis): node size = RecommendationRank, hover for details. Output: `data/substack_graph.html` by default. Open in a browser to zoom, pan, and explore.
 
 See [docs/data-analysis.md](docs/data-analysis.md) and [docs/visualization.md](docs/visualization.md) (layout, click-to-archive, Shift-freeze).
 
-### Publication lists and PageRank distribution
+### Publication lists and RecommendationRank distribution
 
 ```bash
 python scripts/milestone02/add_publication_lists.py
 # Optional: python scripts/milestone02/add_publication_lists.py -n 300
 ```
 
-- **add_publication_lists.py** — Generates `data/graph-publications.html` (top-N by PageRank), `data/db-publications.html` (all publications in the DB), and `index.html` (iframe wrapper with links to the graph and list pages). Run after `visualize.py` so the graph and index exist. The script also runs **pagerank_distribution.py** and embeds its output above the db-publications table.
-- **pagerank_distribution.py** — Standalone: loads the recommendation graph, computes PageRank, fits a power law PR(r) ≈ c·r^−α, and can write `data/pagerank_distribution.json` and/or an HTML fragment. The fragment shows a rank–PageRank chart (log y) with data points and the fitted curve; add_publication_lists embeds it so it appears above “All publications in the database.” Run directly for JSON only: `python scripts/milestone02/pagerank_distribution.py --json`.
+- **add_publication_lists.py** — Generates `data/graph-publications.html` (top-N by RecommendationRank), `data/db-publications.html` (all publications in the DB), and `index.html` (iframe wrapper with links to the graph and list pages). Run after `visualize.py` so the graph and index exist. The script also runs **pagerank_distribution.py** and embeds its RecommendationRank distribution above the db-publications table.
+- **pagerank_distribution.py** — Standalone: loads the recommendation graph, computes RecommendationRank, fits a power law RR(r) ≈ c·r^−α, and can write `data/pagerank_distribution.json` and/or an HTML fragment. The fragment shows a rank–RecommendationRank chart (log y) with data points and the fitted curve; add_publication_lists embeds it so it appears above “All publications in the database.” Run directly for JSON only: `python scripts/milestone02/pagerank_distribution.py --json`.
 
 ### View the database
 

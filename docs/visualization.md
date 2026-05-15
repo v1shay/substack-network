@@ -1,22 +1,22 @@
 # Visualization (interactive HTML graph)
 
-The project builds an **interactive HTML graph** of the recommendation network using **pyvis** (which uses vis.js under the hood). Node size = PageRank, hover shows name/domain/rank, and **clicking a node opens the publication’s Substack archive (post list) in a new tab** so you bypass the subscribe page. This doc explains how that “click to open URL” behavior is implemented.
+The project builds an **interactive HTML graph** of the recommendation network using **pyvis** (which uses vis.js under the hood). Node size = RecommendationRank, hover shows name/domain/rank, and **clicking a node opens the publication’s Substack archive (post list) in a new tab** so you bypass the subscribe page. RecommendationRank is PageRank computed over directed publication recommendation edges. This doc explains how that “click to open URL” behavior is implemented.
 
 ## What the visualization is
 
 - **Script:** `scripts/milestone01/visualize.py`
-- **Input:** `cartographer.db` (publications + recommendations) at repo root. Same graph and PageRank as `scripts/milestone01/centrality.py`.
+- **Input:** `cartographer.db` (publications + recommendations) at repo root. Same graph and RecommendationRank as `scripts/milestone01/centrality.py`.
 - **Output:** A single HTML file (default: `data/substack_graph.html`) that you open in a browser. You can zoom, pan, hover for details, and **click a node to open that publication’s archive** (e.g. `https://name.substack.com/archive` or `https://custom.domain/archive`) in a new tab.
-- **Scope:** Only the top N nodes by PageRank (default 200, max 500) so the graph stays readable.
+- **Scope:** Only the top N nodes by RecommendationRank (default 300, max 1000) so the graph stays readable.
 - **Layout algorithm:** vis.js **Barnes–Hut** force-directed layout with physics (gravity, central gravity, spring length/strength). Nodes repel and edges act as springs until the layout stabilizes. **Proximity has semantics:** nodes that end up close are linked in the **recommendation graph** (one recommends the other, or they share many common recommenders). Layout reflects “who recommends whom,” not content or topic similarity.
 - **Stopping node movement:** Nodes keep moving when you first open the graph. **Press Shift** to freeze them (easier to click); press Shift again to unfreeze.
 - **Hover over** a node for details; **click** to open the publication’s archive (list of posts) in a new tab.
 
 ## Why you can see an isolated component (e.g. two nodes)
 
-The crawler does BFS from seeds, so the full recommendation graph (all edges in the DB) is one connected component. The visualization, however, shows only the **top N nodes by PageRank** and only **edges between those nodes**. So we draw the *induced subgraph* on the top N.
+The crawler does BFS from seeds, so the full recommendation graph (all edges in the DB) is one connected component. The visualization, however, shows only the **top N nodes by RecommendationRank** and only **edges between those nodes**. So we draw the *induced subgraph* on the top N.
 
-If two nodes A and B have high PageRank (enough to be in the top N) and they recommend each other, but every other node that links to or from A or B has *lower* PageRank and is not in the top N, then in the subgraph A and B are connected only to each other. They appear as an isolated pair even though in the full graph they are connected to the rest via nodes that were dropped. So isolated components in the view are an artifact of the top‑N cut, not of BFS.
+If two nodes A and B have high RecommendationRank (enough to be in the top N) and they recommend each other, but every other node that links to or from A or B has *lower* RecommendationRank and is not in the top N, then in the subgraph A and B are connected only to each other. They appear as an isolated pair even though in the full graph they are connected to the rest via nodes that were dropped. So isolated components in the view are an artifact of the top-N cut, not of BFS.
 
 ## Click to open URL: limitation and workaround
 
