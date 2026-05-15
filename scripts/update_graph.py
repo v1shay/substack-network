@@ -116,7 +116,7 @@ def main() -> None:
         )
         print("Crawl started in background (keeps running after you close this terminal).")
 
-    # Build the graph pipeline from current DB: PageRank, then interactive graph, then list pages.
+    # Build the graph pipeline from current DB: RecommendationRank, then interactive graph, then list pages.
     run(
         [py, str(scripts / "milestone01" / "centrality.py")],
         cwd=code_root,

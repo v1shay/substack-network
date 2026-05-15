@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Generate two list pages in data/ and add links to them in index.html (below the graph):
-  1. data/graph-publications.html — all publications in the current graph with their PageRank
-  2. data/db-publications.html — all publications in the database (with a PageRank distribution chart above the table)
+  1. data/graph-publications.html — all publications in the current graph with their RecommendationRank
+  2. data/db-publications.html — all publications in the database (with a RecommendationRank distribution chart above the table)
 
-The chart (rank vs PageRank + power-law fit) is produced by pagerank_distribution.py; add_publication_lists runs it and embeds the fragment. Run from repo root after scripts/milestone01/visualize.py so the graph and index.html exist. Uses the same top-N as the default graph (see visualize.py DEFAULT_TOP_N) so the graph list matches what you see.
+The chart (rank vs RecommendationRank + power-law fit) is produced by pagerank_distribution.py; add_publication_lists runs it and embeds the fragment. Run from repo root after scripts/milestone01/visualize.py so the graph and index.html exist. Uses the same top-N as the default graph (see visualize.py DEFAULT_TOP_N) so the graph list matches what you see.
 
 Usage (from repo root):
     python scripts/milestone02/add_publication_lists.py
@@ -99,7 +99,7 @@ def main() -> None:
     cur.execute("SELECT domain, name FROM publications")
     domain_to_name = {row[0]: (row[1] or "").strip() or row[0] for row in cur.fetchall()}
 
-    # Top N by PageRank (same as visualize.py)
+    # Top N by RecommendationRank (same as visualize.py)
     # Same tie-break (domain) as db list so positions match for nodes in both lists
     sorted_nodes = sorted(pagerank.keys(), key=lambda n: (-pagerank[n], n))[:top_n]
     sub = G.subgraph(sorted_nodes)
@@ -117,10 +117,10 @@ def main() -> None:
         url = domain_to_archive_url(domain)
         rows.append(f'    <tr><td>{i}</td><td><a href="{_h(url)}" target="_blank" rel="noopener">{_h(name)}</a></td><td>{pr:.6f}</td><td>{indeg}</td><td>{outdeg}</td></tr>')
     graph_html = (
-        html_head("Publications in the graph (with PageRank)", back_href="../index.html")
-        + """  <p class="text-muted small">PageRank is on the full network; In/Out are edges within this graph only (to/from other nodes in the list).</p>
+        html_head("Publications in the graph (with RecommendationRank)", back_href="../index.html")
+        + """  <p class="text-muted small">RecommendationRank is PageRank over the full directed recommendation network; In/Out are edges within this graph only (to/from other nodes in the list).</p>
   <table class="table table-striped">
-  <thead><tr><th>#</th><th>Publication</th><th>PageRank</th><th>In</th><th>Out</th></tr></thead>
+  <thead><tr><th>#</th><th>Publication</th><th>RecommendationRank</th><th>In</th><th>Out</th></tr></thead>
   <tbody>
 """
         + "\n".join(rows)
@@ -133,14 +133,14 @@ def main() -> None:
     graph_path.write_text(graph_html, encoding="utf-8")
     print(f"Wrote {graph_path}")
 
-    # ---- db-publications.html (all in DB, same columns as graph list, sorted by PageRank) ----
+    # ---- db-publications.html (all in DB, same columns as graph list, sorted by RecommendationRank) ----
     cur.execute("SELECT domain, name FROM publications ORDER BY domain")
     all_pubs = cur.fetchall()
     cur.execute("SELECT COUNT(*) FROM queue WHERE status = 'failed'")
     failed_count = cur.fetchone()[0]
     conn.close()
 
-    # Build (domain, name, pr, indeg, outdeg); use full G for degrees and PageRank
+    # Build (domain, name, pr, indeg, outdeg); use full G for degrees and RecommendationRank
     db_rows = []
     for domain, name in all_pubs:
         name = (name or "").strip() or domain
@@ -153,7 +153,7 @@ def main() -> None:
             indeg = 0
             outdeg = 0
         db_rows.append((domain, name, pr, indeg, outdeg))
-    db_rows.sort(key=lambda x: (-x[2], x[0]))  # PageRank desc, then domain
+    db_rows.sort(key=lambda x: (-x[2], x[0]))  # RecommendationRank desc, then domain
 
     db_path_html = data_dir / "db-publications.html"
     rows = []
@@ -161,7 +161,7 @@ def main() -> None:
         url = domain_to_archive_url(domain)
         rows.append(f'    <tr><td>{i}</td><td><a href="{_h(url)}" target="_blank" rel="noopener">{_h(name)}</a></td><td>{pr:.6f}</td><td>{indeg}</td><td>{outdeg}</td></tr>')
 
-    # PageRank distribution chart (rank vs PageRank + power-law fit) above the table
+    # RecommendationRank distribution chart (rank vs RecommendationRank + power-law fit) above the table
     chart_fragment = ""
     script_dir = Path(__file__).resolve().parent
     pagerank_distribution_py = script_dir / "pagerank_distribution.py"
@@ -182,14 +182,14 @@ def main() -> None:
             if result.stderr:
                 print(f"  [pagerank_distribution: {result.stderr.strip()}]", file=sys.stderr)
     except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-        print(f"  [Skipping PageRank chart: {e}]", file=sys.stderr)
+        print(f"  [Skipping RecommendationRank chart: {e}]", file=sys.stderr)
 
     db_html = (
         html_head("All publications in the database", back_href="../index.html")
         + chart_fragment
         + f"""  <p>{len(all_pubs)} publications.</p>
   <table class="table table-striped">
-  <thead><tr><th>#</th><th>Publication</th><th>PageRank</th><th>In</th><th>Out</th></tr></thead>
+  <thead><tr><th>#</th><th>Publication</th><th>RecommendationRank</th><th>In</th><th>Out</th></tr></thead>
   <tbody>
 """
         + "\n".join(rows)

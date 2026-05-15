@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 Build an interactive HTML graph of the recommendation network (pyvis).
-Uses the same DB and PageRank as milestone02-centrality.py. Limits to top N nodes
-by PageRank so the graph stays readable; node size = PageRank, tooltip = name + rank.
+Uses the same DB and RecommendationRank as centrality.py. Limits to top N nodes
+by RecommendationRank so the graph stays readable; node size = RecommendationRank,
+tooltip = name + rank.
 Click a node to open its Substack page in a new tab.
 
 Requires: pip install pyvis networkx numpy scipy
@@ -30,7 +31,7 @@ except ImportError:
     print("❌ pyvis required. pip install pyvis", file=sys.stderr)
     sys.exit(1)
 
-# Number of nodes in the graph (top N by PageRank). Must match add_publication_lists.py -n when generating the graph list.
+# Number of nodes in the graph (top N by RecommendationRank). Must match add_publication_lists.py -n when generating the graph list.
 DEFAULT_TOP_N = 300
 TOP_N_MAX = 1000
 
@@ -51,7 +52,7 @@ def main():
     out_path = root / "data" / "substack_graph.html"
     parser = argparse.ArgumentParser(description="Interactive HTML graph (pyvis) of recommendation network.")
     parser.add_argument("--db", type=str, default=None, help="Path to cartographer.db")
-    parser.add_argument("-n", type=int, default=DEFAULT_TOP_N, metavar="N", help=f"Top N nodes by PageRank to show (default: {DEFAULT_TOP_N}, max: {TOP_N_MAX})")
+    parser.add_argument("-n", type=int, default=DEFAULT_TOP_N, metavar="N", help=f"Top N nodes by RecommendationRank to show (default: {DEFAULT_TOP_N}, max: {TOP_N_MAX})")
     parser.add_argument("-o", "--output", type=str, default=None, help="Output HTML path (default: data/substack_graph.html)")
     args = parser.parse_args()
     if args.db:
@@ -77,18 +78,19 @@ def main():
         conn.close()
         sys.exit(1)
 
+    # RecommendationRank: PageRank applied to directed publication recommendation edges.
     pagerank = nx.pagerank(G)
     in_degree = dict(G.in_degree())
     cur.execute("SELECT domain, name FROM publications")
     domain_to_name = {row[0]: (row[1] or "").strip() or row[0] for row in cur.fetchall()}
     conn.close()
 
-    # Top N nodes by PageRank; subgraph = only those nodes and edges between them
+    # Top N nodes by RecommendationRank; subgraph = only those nodes and edges between them
     # Tie-break by domain so rank matches graph list and db list (add_publication_lists.py)
     sorted_nodes = sorted(pagerank.keys(), key=lambda n: (-pagerank[n], n))[:top_nodes]
     sub = G.subgraph(sorted_nodes).copy()
 
-    # Scale PageRank to node size (e.g. 8–35)
+    # Scale RecommendationRank to node size (e.g. 8–35)
     pr_values = [pagerank[n] for n in sub.nodes()]
     min_pr = min(pr_values)
     max_pr = max(pr_values)
@@ -108,7 +110,7 @@ def main():
         label_text = name[4:].lstrip(".") if name.startswith("www.") else name
         label_text = label_text[:25] + ".." if len(label_text) > 27 else label_text
         rank_approx = sorted_nodes.index(node) + 1 if node in sorted_nodes else 0
-        title = f"{name}\ndomain: {node}\nPageRank: {pr:.4f}\nin-degree: {deg}\n(rank ≈ {rank_approx})\nClick to open Substack page"
+        title = f"{name}\ndomain: {node}\nRecommendationRank: {pr:.4f}\nalgorithm: PageRank over recommendation edges\nin-degree: {deg}\n(rank ≈ {rank_approx})\nClick to open Substack page"
         net.add_node(
             node,
             label=label_text,

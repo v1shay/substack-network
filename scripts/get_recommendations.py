@@ -158,7 +158,7 @@ def redact_sensitive_fields(value):
 
 
 def get_top_ranked_publications(db_path: Path, n: int = 20) -> list[tuple[str, str, float]]:
-    """Get top N publications by PageRank. Returns list of (domain, name, pagerank)."""
+    """Get top N publications by RecommendationRank. Returns (domain, name, score)."""
     if nx is None:
         print("Error: networkx required for ranking. Install with: pip install networkx", file=sys.stderr)
         sys.exit(1)
@@ -183,7 +183,7 @@ def get_top_ranked_publications(db_path: Path, n: int = 20) -> list[tuple[str, s
         conn.close()
         sys.exit(1)
     
-    # PageRank
+    # RecommendationRank: PageRank applied to directed publication recommendation edges.
     pagerank = nx.pagerank(G)
     
     # Domain -> name from publications
@@ -191,7 +191,7 @@ def get_top_ranked_publications(db_path: Path, n: int = 20) -> list[tuple[str, s
     domain_to_name = {row[0]: (row[1] or "").strip() or row[0] for row in cur.fetchall()}
     conn.close()
     
-    # Build rankings: (domain, name, pagerank), sorted by pagerank desc
+    # Build rankings: (domain, name, recommendation_rank), sorted by score desc
     rows = []
     for domain in pagerank:
         name = domain_to_name.get(domain, domain)
@@ -214,7 +214,9 @@ def analyze_recommendations_report(db_path: Path, top_n: int = 20) -> None:
     report_lines.append("")
     report_lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     report_lines.append("")
-    report_lines.append(f"Analyzed top {top_n} publications by PageRank.")
+    report_lines.append(f"Analyzed top {top_n} publications by RecommendationRank.")
+    report_lines.append("")
+    report_lines.append("RecommendationRank is PageRank computed over directed publication recommendation edges.")
     report_lines.append("")
     report_lines.append("---")
     report_lines.append("")
@@ -225,7 +227,7 @@ def analyze_recommendations_report(db_path: Path, top_n: int = 20) -> None:
     total_personal_mode_none = 0
     failed_fetches = 0
     
-    for rank, (domain, name, pagerank) in enumerate(top_pubs, 1):
+    for rank, (domain, name, recommendation_rank) in enumerate(top_pubs, 1):
         print(f"[{rank}/{top_n}] Fetching recommendations for {domain}...", file=sys.stderr)
         
         base_url = f"https://{domain}" if not domain.startswith("http") else domain
@@ -234,7 +236,7 @@ def analyze_recommendations_report(db_path: Path, top_n: int = 20) -> None:
         report_lines.append(f"## {rank}. {name}")
         report_lines.append("")
         report_lines.append(f"- **Domain:** `{domain}`")
-        report_lines.append(f"- **PageRank:** {pagerank:.6f}")
+        report_lines.append(f"- **RecommendationRank:** {recommendation_rank:.6f}")
         report_lines.append("")
         
         if recs is None:
