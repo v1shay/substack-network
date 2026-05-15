@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-PageRank distribution: rank–PageRank plot and power-law fit (Zipf-like).
+RecommendationRank distribution: rank-RecommendationRank plot and power-law fit (Zipf-like).
 
-Loads the recommendation graph from cartographer.db, computes PageRank, sorts publications
-by PageRank (rank 1 = highest). Fits a power law PR(r) ≈ c·r^(-α) in log-log space and
-reports exponent α and R². Can output JSON and/or an HTML fragment for embedding above
-the "All publications in the database" table.
+Loads the recommendation graph from cartographer.db, computes RecommendationRank
+(PageRank over recommendation edges), sorts publications by RecommendationRank
+(rank 1 = highest). Fits a power law RR(r) ~= c*r^(-alpha) in log-log space and
+reports exponent alpha and R^2. Can output JSON and/or an HTML fragment for embedding
+above the "All publications in the database" table.
 
 Usage (from repo root):
     python scripts/milestone02/pagerank_distribution.py --json
@@ -20,6 +21,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+RECOMMENDATION_RANK_NAME = "RecommendationRank"
+
 try:
     import networkx as nx
     import numpy as np
@@ -30,7 +33,7 @@ except ImportError as e:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="PageRank distribution and power-law fit (rank vs PageRank)."
+        description="RecommendationRank distribution and power-law fit (rank vs RecommendationRank)."
     )
     parser.add_argument("--db", type=str, default=None, help="Path to cartographer.db")
     parser.add_argument(
@@ -65,12 +68,13 @@ def main() -> None:
         conn.close()
         sys.exit(1)
 
+    # RecommendationRank: PageRank applied to directed publication recommendation edges.
     pagerank = nx.pagerank(G)
     cur.execute("SELECT domain FROM publications ORDER BY domain")
     all_domains = [row[0] for row in cur.fetchall()]
     conn.close()
 
-    # (rank, pr) with rank 1 = highest PageRank
+    # (rank, pr) with rank 1 = highest RecommendationRank
     db_rows = []
     for domain in all_domains:
         pr = pagerank.get(domain, 0.0)
@@ -79,7 +83,7 @@ def main() -> None:
     ranks = list(range(1, len(db_rows) + 1))
     prs = [r[1] for r in db_rows]
 
-    # Power-law fit: PR(r) ≈ c·r^(-α)  =>  log(PR) = log(c) - α·log(r)
+    # Power-law fit: RR(r) ~= c*r^(-alpha) => log(RR) = log(c) - alpha*log(r)
     # Use only points with pr > 0
     fit_ranks = []
     fit_prs = []
@@ -108,6 +112,8 @@ def main() -> None:
         "points": points,
         "power_law": {"c": float(c), "alpha": float(alpha), "r_squared": float(r_squared)},
         "n_publications": len(ranks),
+        "metric": RECOMMENDATION_RANK_NAME,
+        "algorithm": "PageRank over directed publication recommendation edges",
     }
 
     if args.json:
@@ -122,8 +128,8 @@ def main() -> None:
         # Inline JSON for Chart.js (escape for script tag: avoid </script>)
         data_js = json.dumps(out).replace("</", "<\\/")
         fragment = f'''  <div class="mb-4">
-    <h2 class="h5">PageRank distribution (rank vs PageRank)</h2>
-    <p class="text-muted small"><strong>Rank</strong> = position when publications are sorted by PageRank (rank 1 = highest). <strong>Power-law fit</strong> PR(r) ≈ c·r<sup>−α</sup>: <strong>α</strong> = {alpha:.3f} (steepness; Zipf-like when α ≈ 1), <strong>c</strong> = {c:.2e}, <strong>R²</strong> = {r_squared:.4f} (fit quality).</p>
+    <h2 class="h5">RecommendationRank distribution (rank vs RecommendationRank)</h2>
+    <p class="text-muted small"><strong>RecommendationRank</strong> is PageRank computed over directed publication recommendation edges. <strong>Rank</strong> = position when publications are sorted by RecommendationRank (rank 1 = highest). <strong>Power-law fit</strong> RR(r) ≈ c·r<sup>−α</sup>: <strong>α</strong> = {alpha:.3f} (steepness; Zipf-like when α ≈ 1), <strong>c</strong> = {c:.2e}, <strong>R²</strong> = {r_squared:.4f} (fit quality).</p>
     <div style="height:280px;"><canvas id="pagerank-distribution-chart"></canvas></div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
@@ -146,7 +152,7 @@ def main() -> None:
   }}
   var datasets = [
     // Publication data first
-    {{ label: 'PageRank (data)', data: scatterData, backgroundColor: 'rgba(0,0,0,0.92)', borderColor: 'rgba(0,0,0,0.92)', pointBorderWidth: 0, pointRadius: 1.5 }},
+    {{ label: 'RecommendationRank (data)', data: scatterData, backgroundColor: 'rgba(0,0,0,0.92)', borderColor: 'rgba(0,0,0,0.92)', pointBorderWidth: 0, pointRadius: 1.5 }},
     // Red fit on top, transparent so points remain visible
     {{ label: 'Power-law fit', data: lineData, type: 'line', borderColor: 'rgba(220,53,69,0.55)', borderWidth: 12, fill: false, pointRadius: 0, tension: 0 }}
   ];
@@ -186,7 +192,7 @@ def main() -> None:
             var rank = dp.parsed.x;
             var pr = dp.parsed.y;
             var label = dp.dataset.label || 'Point';
-            tooltipEl.textContent = label + ': PageRank ' + Number(pr).toFixed(6) + ', rank ' + rank;
+            tooltipEl.textContent = label + ': RecommendationRank ' + Number(pr).toFixed(6) + ', rank ' + rank;
 
             var rect = context.chart.canvas.getBoundingClientRect();
             tooltipEl.style.opacity = 1;
@@ -198,7 +204,7 @@ def main() -> None:
       }},
       scales: {{
         x: {{ title: {{ display: true, text: 'Rank' }}, type: 'linear' }},
-        y: {{ title: {{ display: true, text: 'PageRank' }}, type: 'logarithmic' }}
+        y: {{ title: {{ display: true, text: 'RecommendationRank' }}, type: 'logarithmic' }}
       }}
     }}
   }});
