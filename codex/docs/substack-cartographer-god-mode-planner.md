@@ -195,6 +195,27 @@ Checkpoint:
 - `git remote -v` is understood.
 - One commit records documentation-only planner files if this repo is the canonical target.
 
+Done when:
+
+- The canonical repo path is documented in this planner and CHRONOS.
+- `git status --short` is clean before feature work starts.
+- `origin` points to `https://github.com/v1shay/substack-network.git`.
+- Work happens on a named feature branch, not directly on `main`.
+
+Real-world verification:
+
+- Run `git fetch origin --prune`.
+- Run `git status --short`.
+- Run `git remote -v`.
+- Run `git branch --show-current`.
+- Push a branch and confirm GitHub shows it.
+
+Deliverables:
+
+- A working local checkout.
+- A pushed branch on GitHub.
+- A short note in the planner naming the canonical repo and branch policy.
+
 ### 1. RecommendationRank Baseline
 
 Goal: make current publication PageRank explicit as `RecommendationRank`.
@@ -218,6 +239,26 @@ Tests:
 - Existing `test_get_recommendations.py`.
 - Existing update graph tests.
 - Add focused test only if changing output contracts.
+
+Done when:
+
+- User-facing docs and output labels clearly distinguish `RecommendationRank` from future `CommentRank`.
+- Existing PageRank behavior remains numerically unchanged unless intentionally documented.
+- A top-N RecommendationRank export can be generated from the current database.
+- The graph/list pages still render with the same ranked publications.
+
+Real-world verification:
+
+- Run `python scripts/milestone01/centrality.py -n 25 -o data/recommendation_rank.csv`.
+- Run `python scripts/milestone02/pagerank_distribution.py --json`.
+- Run `python scripts/update_graph.py` on a safe/local DB copy if the crawler state is acceptable.
+- Open `data/db-publications.html` and confirm the rank column language is clear.
+
+Deliverables:
+
+- Updated docs/UI naming.
+- `data/recommendation_rank.csv` or equivalent stable export.
+- A short doc section explaining graph direction, nodes, edges, damping, and interpretation.
 
 Commit size:
 
@@ -258,6 +299,27 @@ Tests:
 - Snapshot insert/idempotency test.
 - Delta calculation test with tiny fixture graph.
 
+Done when:
+
+- A snapshot run can be saved without changing recommendation crawl data.
+- Two snapshots can be compared and produce rank, score, percentile, and entrant/disappeared deltas.
+- The relevancy formula is documented and versioned.
+- Snapshot output is reproducible from the same database state.
+
+Real-world verification:
+
+- Create a snapshot from the current DB.
+- Create a second fixture or copied-DB snapshot with a known graph change.
+- Run comparison and confirm the changed publication moves in the expected direction.
+- Inspect SQLite rows in `recommendation_rank_runs` and `recommendation_rank_snapshots`.
+
+Deliverables:
+
+- Snapshot schema migration.
+- `scripts/milestone03/recommendation_rank_snapshots.py`.
+- CSV/JSON comparison report.
+- Documentation with example commands and interpretation warnings.
+
 Commit size:
 
 - Commit 1: schema/docs.
@@ -295,6 +357,27 @@ Tests:
 - Mock timeout vs 404 vs parse failure.
 - Existing retry/investigate tests.
 
+Done when:
+
+- Failed publications have explicit failure reasons, not just `failed`.
+- Redirect/canonical-domain failures are recovered when the publication endpoint is reachable.
+- The investigation report explains what a human should do next for each failure class.
+- Retry behavior does not mark unrecoverable domains as crawled.
+
+Real-world verification:
+
+- Run `python scripts/milestone02/extract_failed.py` on the current DB.
+- Run `python scripts/milestone02/investigate_failed.py --full` against a small failed sample.
+- Run `python scripts/milestone02/retry_failed.py --max 25 --delay 1.5`.
+- Confirm recovered domains move from `queue.status='failed'` to `crawled` and appear in `unfailed`.
+
+Deliverables:
+
+- Failure taxonomy report.
+- Updated failed-publications HTML/log output.
+- Retry summary showing recovered vs still-failed domains.
+- Tests covering redirect, timeout, 404, and invalid JSON.
+
 Commit size:
 
 - One commit for classification schema/report.
@@ -327,6 +410,27 @@ Tests:
 - Unit test bounded concurrency with fake fetcher.
 - Integration test queue status remains valid after mixed success/failure.
 - DB integrity test after concurrent batch.
+
+Done when:
+
+- Bounded concurrency is opt-in or conservatively defaulted.
+- Fetching can run concurrently while SQLite writes remain deterministic and safe.
+- Rate limits, 429s, timeouts, and retries are handled without corrupting queue state.
+- Throughput improves on a real pilot without increasing false failures.
+
+Real-world verification:
+
+- Run a baseline synchronous crawl for a small capped sample and record publications/minute and failure rate.
+- Run the bounded-concurrency crawl with the same or comparable sample.
+- Compare crawled count, failed count, and DB integrity.
+- Run `python scripts/comments/db_audit.py --read-only --fail-on-anomaly` if comment tables are touched.
+
+Deliverables:
+
+- CLI flag such as `--concurrency`.
+- Crawl performance summary with before/after numbers.
+- DB integrity report.
+- Docs explaining safe concurrency limits and Substack politeness constraints.
 
 Commit size:
 
@@ -364,6 +468,27 @@ Tests:
 - Existing endpoint vitality test.
 - Add activity aggregation test.
 
+Done when:
+
+- A pilot backfill can ingest comments for a bounded publication set and resume cleanly after interruption.
+- Per-publication status records show attempts, success/failure, counts, and latest errors.
+- Comment activity summaries can identify publications with high recent activity.
+- Endpoint failures are fail-open and do not damage recommendation crawl state.
+
+Real-world verification:
+
+- Run `python scripts/comments/comment_backfill.py --dry-run --limit 50`.
+- Run `python scripts/comments/comment_backfill.py --limit 50 --post-limit 3 --delay 1`.
+- Run `python scripts/comments/db_audit.py --read-only --fail-on-anomaly`.
+- Query counts for `posts`, `comments`, `users`, `comment_ingestion_runs`, and `comment_publication_status`.
+
+Deliverables:
+
+- Backfill run summary.
+- Activity summary CSV/HTML.
+- Updated docs with pilot and scale-up commands.
+- Evidence that resume/retry status works on a real DB.
+
 Commit size:
 
 - Commit 1: aggregation query/report.
@@ -399,6 +524,25 @@ Tests:
 
 - Existing `test_user_classifier.py`.
 - Add classification confidence fixture tests.
+
+Done when:
+
+- Commenters are classified with explicit confidence states.
+- The classifier distinguishes confirmed publication owners from likely comment-only users.
+- Unknown/private/failed profile lookups remain auditable instead of silently becoming false negatives.
+- No user is collapsed into a publication unless ownership evidence is present.
+
+Real-world verification:
+
+- Run classification for a small set of commenters from real ingested comments.
+- Inspect sample profiles manually in Substack for confirmed owner and likely comment-only cases.
+- Generate an audit report showing handle, hasPosts, role, publication id, confidence, and source evidence.
+
+Deliverables:
+
+- Classification audit report.
+- Confidence-state docs.
+- Tests for confirmed owner, comment-only, private/unknown, and failed lookup cases.
 
 Commit size:
 
@@ -462,6 +606,27 @@ Tests:
 - Parent/child edge extraction.
 - Idempotent score persistence.
 
+Done when:
+
+- CommentRank can be computed for one publication and globally.
+- Dangling comments and one-time commenters are handled through a documented teleportation vector.
+- Results are persisted with run metadata and can be regenerated.
+- The output includes baseline comparison columns so CommentRank is not confused with raw reply count.
+
+Real-world verification:
+
+- Pick one publication with real ingested comments.
+- Run CommentRank on that publication.
+- Inspect the top 20 ranked comments against raw reply counts and available engagement metadata.
+- Confirm at least one ranked result can be traced back to the original post/comment URL or DB row.
+
+Deliverables:
+
+- `scripts/comments/comment_rank.py`.
+- `comment_rank_runs` and `comment_rank_scores` tables.
+- CSV report with comment id, post id, user, score, rank, replies received, and optional likes.
+- Documentation explaining matrix construction, edge direction, damping, and limits.
+
 Commit size:
 
 - Commit 1: pure algorithm and tests.
@@ -499,6 +664,26 @@ Tests:
 
 - Fixture with users spanning one vs many topics.
 - Entropy and bridge score tests.
+
+Done when:
+
+- The system can rank commenters by cross-publication and cross-topic bridge behavior.
+- `SuperConnectorScore` is documented and decomposed into understandable components.
+- Reports include evidence columns, not just a score.
+- Privacy/anonymization behavior is explicit before publishing any user-level output.
+
+Real-world verification:
+
+- Run the score on a small real comment dataset with topic labels.
+- Manually inspect top 10 users to confirm they actually appear across multiple publications/topics.
+- Compare against a simple baseline: distinct publications commented on.
+- Verify anonymized mode if outputs leave the local machine or become public.
+
+Deliverables:
+
+- Super-connector scoring CLI/report.
+- CSV with user handle/id, publication count, topic count, entropy, betweenness, and score.
+- Documentation for interpretation and privacy policy.
 
 Commit size:
 
@@ -542,6 +727,28 @@ Tests:
 - Prompt formatting tests.
 - Idempotent writes by model/prompt hash.
 - Mock LLM response parser tests.
+
+Done when:
+
+- Topic, sentiment, stance, and framing are stored as separate auditable labels.
+- Each label records model/provider/version, prompt hash, source row, and evidence.
+- A small batch can be reviewed before committing labels at scale.
+- Jurafsky-inspired framing/stance research is translated into a concrete taxonomy or annotation guide.
+
+Real-world verification:
+
+- Select a small sample of publications/comments from real data.
+- Run embedding-based candidate clustering if available.
+- Run LLM labeling on the sample.
+- Manually review labels for obvious errors and revise taxonomy before scale.
+- Confirm rerunning the same model/prompt does not duplicate rows.
+
+Deliverables:
+
+- Label taxonomy or annotation guide citing the Jurafsky/framing/stance direction.
+- Batch labeling CLI or extension to existing label tooling.
+- Review CSV/HTML with source text, labels, confidence/reason, model, prompt hash, and evidence.
+- Tests for prompt construction, response parsing, and idempotent persistence.
 
 Commit size:
 
@@ -590,6 +797,28 @@ Tests:
 - Sparse series returns low-confidence result.
 - Time bucket boundaries are deterministic.
 
+Done when:
+
+- A specific time-series question is chosen before implementation.
+- Comment timestamps can be bucketed consistently by publication and time zone.
+- FFT output includes dominant periods and confidence/sparsity warnings.
+- Sparse or irregular data is not over-interpreted.
+
+Real-world verification:
+
+- Choose one real publication with enough comments.
+- Generate hourly or daily comment-count series.
+- Run FFT and inspect dominant periods.
+- Compare the detected pattern against the raw time-series chart.
+- Run a sparse-publication example and confirm it returns low confidence.
+
+Deliverables:
+
+- Time-bucket extraction CLI.
+- Fourier analyzer/report.
+- CSV/JSON output with bucketed counts, dominant periods, amplitudes, and confidence.
+- Documentation with the chosen question and interpretation limits.
+
 Commit size:
 
 - Commit 1: time-bucket extraction.
@@ -615,6 +844,26 @@ Plan:
   - Time-series dashboard.
 - Add UI labels that state which graph is being shown.
 - Do not make force-layout distance imply semantic similarity unless using embeddings graph.
+
+Done when:
+
+- Each visualization clearly states the graph type, node meaning, edge meaning, and ranking/scoring signal.
+- Recommendation, comment, user bridge, semantic, and time-series views do not overload one layout with incompatible meanings.
+- Generated pages can be opened locally and inspected without broken assets.
+- Any public export avoids exposing sensitive user-level details unless explicitly approved.
+
+Real-world verification:
+
+- Generate the full local site.
+- Open `index.html` and each generated graph/report page.
+- Check that node labels, links, legends, and score columns match the underlying signal.
+- Verify semantic graph distance is only used for embedding-derived views.
+
+Deliverables:
+
+- Separate HTML/report pages for each implemented analysis view.
+- Legend/metadata block for each page.
+- Screenshot or manual verification note for every public-facing page.
 
 Commit size:
 
