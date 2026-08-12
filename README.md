@@ -1,4 +1,10 @@
+<div align = "center">
+
+<img width="503" height="461" alt="image" src="https://github.com/user-attachments/assets/0fb648ef-a6e8-4de9-bb6a-ae5e9ab37987" />
+
 # Substack Cartographer
+
+</div>
 
 Maps the Substack network: crawl publications and recommendations, then analyze and visualize.
 
